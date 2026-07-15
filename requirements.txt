@@ -1,0 +1,11 @@
+opencv-python
+mediapipe
+numpy
+pandas
+scikit-learn
+torch
+streamlit
+streamlit-webrtc
+pyttsx3
+matplotlib
+seaborn

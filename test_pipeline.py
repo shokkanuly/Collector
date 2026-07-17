@@ -28,23 +28,22 @@ class TestSignLanguagePipeline(unittest.TestCase):
             else:
                 mock_landmarks.append((10.0 + i, 20.0 + i, 30.0 + i))
                 
-        # MediaPipe mock representation
+        # MediaPipe Tasks API mock representation. The HandLandmarker returns a
+        # result whose `.hand_landmarks` is a list (one entry per detected hand),
+        # each entry being a flat list of landmark objects exposing x/y/z.
         class MockLandmark:
             def __init__(self, x, y, z):
                 self.x = x
                 self.y = y
                 self.z = z
-                
-        class MockHandLandmarks:
-            def __init__(self, points):
-                self.landmark = [MockLandmark(p[0], p[1], p[2]) for p in points]
-                
+
         class MockResults:
             def __init__(self, points):
-                self.multi_hand_landmarks = [MockHandLandmarks(points)]
-                
-        # Override MediaPipe process method to return our mock hand
-        tracker.hands.process = lambda rgb_img: MockResults(mock_landmarks)
+                self.hand_landmarks = [[MockLandmark(p[0], p[1], p[2]) for p in points]]
+
+        # Override the Tasks-API detector to return our mock hand. A default
+        # HandTracker runs in VIDEO mode, so detect_for_video is the call used.
+        tracker._landmarker.detect_for_video = lambda mp_image, timestamp_ms: MockResults(mock_landmarks)
         
         # Run extraction on a blank image
         blank_img = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -82,16 +81,21 @@ class TestSignLanguagePipeline(unittest.TestCase):
         self.assertEqual(output.shape, (4, 5))
 
     def test_train_pipeline_dry_run(self):
-        """Creates a tiny dummy CSV dataset and runs train.py to verify splitting and fitting."""
-        csv_path = 'landmarks_dataset.csv'
-        backup_path = 'landmarks_dataset.csv.backup'
-        
-        # Backup existing dataset if present
-        has_existing = os.path.exists(csv_path)
-        if has_existing:
-            os.rename(csv_path, backup_path)
-            
+        """Creates a tiny dummy CSV dataset and runs train.py to verify splitting and fitting.
+
+        The whole dry run executes inside a throwaway temporary directory, so it can
+        never touch, overwrite, or delete the repository's real dataset or its
+        committed model artifacts. Cleanup only removes the temp directory itself.
+        """
+        import tempfile
+        import shutil
+
+        original_cwd = os.getcwd()
+        tmp_dir = tempfile.mkdtemp(prefix="train_dryrun_")
         try:
+            # train.py reads/writes all paths relative to the cwd, so isolate it here.
+            os.chdir(tmp_dir)
+
             # Create a tiny mock dataset
             # 5 classes (A-E), 8 sessions per class, 15 frames per session
             data = []
@@ -103,36 +107,30 @@ class TestSignLanguagePipeline(unittest.TestCase):
                         # 63 landmarks + label + session_id
                         row = list(np.random.rand(63)) + [label, session_id]
                         data.append(row)
-                        
-            # Write to CSV
+
+            # Write to CSV (inside the temp dir)
             cols = []
             for i in range(21):
                 cols.extend([f"l{i}_x", f"l{i}_y", f"l{i}_z"])
             cols.extend(["label", "session_id"])
-            
+
             df = pd.DataFrame(data, columns=cols)
-            df.to_csv(csv_path, index=False)
-            
-            # Run train.py logic directly
+            df.to_csv('landmarks_dataset.csv', index=False)
+
+            # Run train.py logic directly; every output lands in the temp dir.
             from train import train_and_evaluate
             train_and_evaluate()
-            
+
             # Verify models generated
             self.assertTrue(os.path.exists('random_forest.joblib'))
             self.assertTrue(os.path.exists('best_model.pth'))
             self.assertTrue(os.path.exists('label_map.joblib'))
             self.assertTrue(os.path.exists('evaluation_confusion_matrix.png'))
-            
+
         finally:
-            # Cleanup mock outputs
-            for f in ['random_forest.joblib', 'best_model.pth', 'label_map.joblib', 'evaluation_confusion_matrix.png']:
-                if os.path.exists(f):
-                    os.remove(f)
-            if os.path.exists(csv_path):
-                os.remove(csv_path)
-            # Restore backup if it existed
-            if has_existing:
-                os.rename(backup_path, csv_path)
+            # Only the temp directory is removed; real repo files are never referenced.
+            os.chdir(original_cwd)
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 if __name__ == "__main__":
     unittest.main()

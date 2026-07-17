@@ -3,8 +3,8 @@ import time
 import os
 import csv
 import numpy as np
-import mediapipe as mp
-from utils.hand_tracker import HandTracker
+import pandas as pd
+from utils.hand_tracker import HandTracker, _draw_hand_landmarks
 
 def collect_data():
     print("==================================================")
@@ -23,7 +23,19 @@ def collect_data():
     frame_interval = 0.2  # 5 FPS
     
     csv_path = 'landmarks_dataset.csv'
-    
+
+    # Continue numbering after any sessions already recorded for this label, so that
+    # re-running for the same letter appends new sessions instead of colliding with
+    # the existing ones and silently merging two recordings under one session_id.
+    session_offset = 0
+    if os.path.exists(csv_path):
+        existing = pd.read_csv(csv_path)
+        prior = existing.loc[existing['label'] == label, 'session_id'].unique()
+        if len(prior) > 0:
+            session_offset = max(int(s.split('_')[1]) for s in prior)
+            print(f"\nFound {len(prior)} existing session(s) for '{label}'.")
+            print(f"New sessions will be numbered from {label}_{session_offset + 1:02d}.")
+
     # Initialize tracker and webcam
     tracker = HandTracker()
     cap = cv2.VideoCapture(0)
@@ -32,11 +44,6 @@ def collect_data():
         print("Error: Could not open webcam. Please check your camera connection and permissions.")
         return
 
-    # MediaPipe drawing utilities
-    mp_drawing = mp.solutions.drawing_utils
-    mp_drawing_styles = mp.solutions.drawing_styles
-    mp_hands = mp.solutions.hands
-
     print(f"\nReady to collect data for label: {label}")
     print(f"You will record {num_sessions} short sessions.")
     print("For each session, vary your hand angle, distance, and lighting.")
@@ -44,7 +51,7 @@ def collect_data():
     input("\nPress Enter to start...")
 
     for session_idx in range(1, num_sessions + 1):
-        session_id = f"{label}_{session_idx:02d}"
+        session_id = f"{label}_{session_offset + session_idx:02d}"
         print(f"\n--- Starting Session {session_idx}/{num_sessions} (ID: {session_id}) ---")
         
         # 1. Countdown Phase (2 seconds)
@@ -117,13 +124,7 @@ def collect_data():
 
             # Visual overlay
             if hand_lms is not None:
-                mp_drawing.draw_landmarks(
-                    display,
-                    hand_lms,
-                    mp_hands.HAND_CONNECTIONS,
-                    mp_drawing_styles.get_default_hand_landmarks_style(),
-                    mp_drawing_styles.get_default_hand_connections_style()
-                )
+                _draw_hand_landmarks(display, hand_lms)
                 
             # Recording Status text
             cv2.putText(display, f"RECORDING SESSION {session_idx}/{num_sessions}", 

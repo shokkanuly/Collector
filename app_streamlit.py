@@ -6,8 +6,7 @@ import joblib
 import queue
 import threading
 import pyttsx3
-import mediapipe as mp
-from utils.hand_tracker import HandTracker
+from utils.hand_tracker import HandTracker, _draw_hand_landmarks
 
 # Try to import WebRTC components
 try:
@@ -191,10 +190,6 @@ with col_demo:
                 self.last_prediction = None
                 self.prediction_counter = 0
                 self.last_spoken = None
-                
-                self.mp_drawing = mp.solutions.drawing_utils
-                self.mp_drawing_styles = mp.solutions.drawing_styles
-                self.mp_hands = mp.solutions.hands
 
             def recv(self, frame):
                 img = frame.to_ndarray(format="bgr24")
@@ -223,13 +218,7 @@ with col_demo:
                             confidence = probs[pred_idx]
                             
                     # Draw visual skeleton
-                    self.mp_drawing.draw_landmarks(
-                        img,
-                        hand_lms,
-                        self.mp_hands.HAND_CONNECTIONS,
-                        self.mp_drawing_styles.get_default_hand_landmarks_style(),
-                        self.mp_drawing_styles.get_default_hand_connections_style()
-                    )
+                    _draw_hand_landmarks(img, hand_lms)
                     
                     # Stable prediction speech trigger
                     if confidence >= self.confidence_threshold:

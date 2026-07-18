@@ -6,42 +6,55 @@ import numpy as np
 import pandas as pd
 from utils.hand_tracker import HandTracker, _draw_hand_landmarks
 
-def collect_data():
+# J and Z are excluded: in ASL fingerspelling they are motion gestures, which
+# a single-frame static-pose collector cannot represent (they belong to the
+# future sequence-model milestone).
+DYNAMIC_LETTERS = {'J', 'Z'}
+
+CSV_PATH = 'landmarks_dataset.csv'
+
+
+def _prior_sessions(csv_path, label):
+    """Return (count, max_session_number) already recorded for this label."""
+    if not os.path.exists(csv_path):
+        return 0, 0
+    existing = pd.read_csv(csv_path)
+    prior = existing.loc[existing['label'] == label, 'session_id'].unique()
+    if len(prior) == 0:
+        return 0, 0
+    return len(prior), max(int(s.split('_')[1]) for s in prior)
+
+
+def collect_data(label=None):
     print("==================================================")
     print("        Sign Language Data Collection Module      ")
     print("==================================================")
-    
-    # Get class label from user. J and Z are excluded: in ASL fingerspelling
-    # they are motion gestures, which a single-frame static-pose collector
-    # cannot represent (they belong to the future sequence-model milestone).
-    DYNAMIC_LETTERS = {'J', 'Z'}
-    while True:
-        label = input("Enter static sign label to collect (A-Z, except J/Z): ").strip().upper()
-        if label in DYNAMIC_LETTERS:
-            print(f"'{label}' is a motion gesture in ASL fingerspelling and can't be "
-                  "captured as a static pose. It will be added with the sequence model.")
-            continue
-        if len(label) == 1 and 'A' <= label <= 'Z':
-            break
-        print("Invalid label. Please enter a single letter A-Z.")
-    
+
+    # Get class label from user unless supplied by the batch runner below.
+    if label is None:
+        while True:
+            label = input("Enter static sign label to collect (A-Z, except J/Z): ").strip().upper()
+            if label in DYNAMIC_LETTERS:
+                print(f"'{label}' is a motion gesture in ASL fingerspelling and can't be "
+                      "captured as a static pose. It will be added with the sequence model.")
+                continue
+            if len(label) == 1 and 'A' <= label <= 'Z':
+                break
+            print("Invalid label. Please enter a single letter A-Z.")
+
     num_sessions = 10
     samples_per_session = 15  # At 5 FPS, this is 3 seconds of capture
     frame_interval = 0.2  # 5 FPS
-    
-    csv_path = 'landmarks_dataset.csv'
+
+    csv_path = CSV_PATH
 
     # Continue numbering after any sessions already recorded for this label, so that
     # re-running for the same letter appends new sessions instead of colliding with
     # the existing ones and silently merging two recordings under one session_id.
-    session_offset = 0
-    if os.path.exists(csv_path):
-        existing = pd.read_csv(csv_path)
-        prior = existing.loc[existing['label'] == label, 'session_id'].unique()
-        if len(prior) > 0:
-            session_offset = max(int(s.split('_')[1]) for s in prior)
-            print(f"\nFound {len(prior)} existing session(s) for '{label}'.")
-            print(f"New sessions will be numbered from {label}_{session_offset + 1:02d}.")
+    prior_count, session_offset = _prior_sessions(csv_path, label)
+    if prior_count > 0:
+        print(f"\nFound {prior_count} existing session(s) for '{label}'.")
+        print(f"New sessions will be numbered from {label}_{session_offset + 1:02d}.")
 
     # Initialize tracker and webcam
     tracker = HandTracker()
@@ -183,5 +196,43 @@ def collect_data():
     cap.release()
     cv2.destroyAllWindows()
 
+def collect_batch(raw_letters):
+    """Collect several letters in one run, e.g.:  python data_collection.py MNST
+
+    Skips J/Z (motion gestures) and offers to skip letters that already have
+    10+ sessions, so passing the whole alphabet is safe.
+    """
+    letters = []
+    for ch in ''.join(raw_letters).upper():
+        if not ch.isalpha():
+            continue
+        if ch in DYNAMIC_LETTERS:
+            print(f"Skipping '{ch}': motion gesture in ASL fingerspelling; "
+                  "needs the sequence model (see ROADMAP.md Stage 5).")
+            continue
+        if ch not in letters:
+            letters.append(ch)
+
+    if not letters:
+        print("No collectable letters given.")
+        return
+
+    print(f"\nBatch collection: {len(letters)} letter(s) -> {' '.join(letters)}")
+    for i, letter in enumerate(letters, 1):
+        count, _ = _prior_sessions(CSV_PATH, letter)
+        if count >= 10:
+            ans = input(f"[{i}/{len(letters)}] '{letter}' already has {count} sessions - skip? [Y/n]: ").strip().lower()
+            if ans != 'n':
+                print(f"Skipped {letter}.")
+                continue
+        print(f"\n[{i}/{len(letters)}] Collecting letter: {letter}")
+        collect_data(letter)
+    print("\nBatch collection finished.")
+
+
 if __name__ == "__main__":
-    collect_data()
+    import sys
+    if len(sys.argv) > 1:
+        collect_batch(sys.argv[1:])
+    else:
+        collect_data()

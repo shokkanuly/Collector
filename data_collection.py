@@ -11,12 +11,19 @@ def collect_data():
     print("        Sign Language Data Collection Module      ")
     print("==================================================")
     
-    # Get class label from user
+    # Get class label from user. J and Z are excluded: in ASL fingerspelling
+    # they are motion gestures, which a single-frame static-pose collector
+    # cannot represent (they belong to the future sequence-model milestone).
+    DYNAMIC_LETTERS = {'J', 'Z'}
     while True:
-        label = input("Enter static sign label to collect (A-E): ").strip().upper()
-        if label in ['A', 'B', 'C', 'D', 'E']:
+        label = input("Enter static sign label to collect (A-Z, except J/Z): ").strip().upper()
+        if label in DYNAMIC_LETTERS:
+            print(f"'{label}' is a motion gesture in ASL fingerspelling and can't be "
+                  "captured as a static pose. It will be added with the sequence model.")
+            continue
+        if len(label) == 1 and 'A' <= label <= 'Z':
             break
-        print("Invalid label. Please enter a letter between A and E.")
+        print("Invalid label. Please enter a single letter A-Z.")
     
     num_sessions = 10
     samples_per_session = 15  # At 5 FPS, this is 3 seconds of capture

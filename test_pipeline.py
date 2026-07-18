@@ -7,7 +7,12 @@ import joblib
 
 # Import components
 from utils.hand_tracker import HandTracker
-from train import FeedForwardNN, LandmarkDataset
+from utils.model import FeedForwardNN
+from train import LandmarkDataset
+
+# 24 static letters: the full alphabet minus J and Z, which are motion
+# gestures in ASL fingerspelling and need the future sequence model.
+STATIC_LETTERS = [c for c in "ABCDEFGHIKLMNOPQRSTUVWXY"]
 
 class TestSignLanguagePipeline(unittest.TestCase):
     
@@ -80,6 +85,11 @@ class TestSignLanguagePipeline(unittest.TestCase):
         output = model(mock_input)
         self.assertEqual(output.shape, (4, 5))
 
+        # The class count is data-driven; the same architecture must scale
+        # to the 24-letter static alphabet.
+        model24 = FeedForwardNN(input_dim=63, output_dim=24)
+        self.assertEqual(model24(mock_input).shape, (4, 24))
+
     def test_train_pipeline_dry_run(self):
         """Creates a tiny dummy CSV dataset and runs train.py to verify splitting and fitting.
 
@@ -96,10 +106,10 @@ class TestSignLanguagePipeline(unittest.TestCase):
             # train.py reads/writes all paths relative to the cwd, so isolate it here.
             os.chdir(tmp_dir)
 
-            # Create a tiny mock dataset
-            # 5 classes (A-E), 8 sessions per class, 15 frames per session
+            # Create a tiny mock dataset covering the full 24-letter static
+            # alphabet: 8 sessions per class, 15 frames per session
             data = []
-            classes = ['A', 'B', 'C', 'D', 'E']
+            classes = STATIC_LETTERS
             for label in classes:
                 for s in range(1, 9):
                     session_id = f"{label}_{s:02d}"

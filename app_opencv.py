@@ -5,28 +5,11 @@ import queue
 import threading
 import numpy as np
 import joblib
-import mediapipe as mp
 
 # PyTorch Imports (only loaded if PyTorch model is used)
 try:
     import torch
-    import torch.nn as nn
-    
-    class FeedForwardNN(nn.Module):
-        def __init__(self, input_dim=63, output_dim=5):
-            super(FeedForwardNN, self).__init__()
-            self.network = nn.Sequential(
-                nn.Linear(input_dim, 128),
-                nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(128, 64),
-                nn.ReLU(),
-                nn.Dropout(0.2),
-                nn.Linear(64, output_dim)
-            )
-            
-        def forward(self, x):
-            return self.network(x)
+    from utils.model import FeedForwardNN
 except ImportError:
     torch = None
 

@@ -7,9 +7,14 @@ J + Z are Stage 5, deferred to the Milestone-2 sequence model.
 Baseline at time of writing: 5 letters (A–E), 765 rows, RF 96.44% / NN 95.11%
 on a session-held-out split. Repo clean at commit `09a67b2`.
 
+**Progress:** Stages 0–3 complete. Full 24-letter dataset collected and
+evaluated — NN 87.9% test accuracy (`632814a`). Remaining: Stage 4 (docs/ship,
+in progress) and Stage 5 (J/Z, deferred). Optional: recollect `F` to fix the
+F→B confusion before final ship.
+
 ---
 
-## Stage 0 — Codebase prep (no new data)
+## Stage 0 — Codebase prep (no new data)  ✅ DONE (`1828027`)
 
 **Goal:** the pipeline trains and runs for an arbitrary letter set, with honest
 evaluation, before any collection time is spent.
@@ -37,7 +42,7 @@ the existing 5-letter `best_model.pth` still loads and runs in `app_opencv.py`.
 
 ---
 
-## Stage 1 — Risk-first pilot: the fist cluster (M, N, S, T)
+## Stage 1 — Risk-first pilot: the fist cluster (M, N, S, T)  ✅ DONE (folded into full collection; cluster passed: M/N F1 1.00, A/S soft)
 
 **Goal:** learn whether the hardest letters are viable *before* the full
 collection marathon. A/E already exist; adding M, N, S, T completes the
@@ -57,7 +62,7 @@ feature tweaks). Rough bar: cluster F1 ≥ 0.85 to proceed unchanged.
 
 ---
 
-## Stage 2 — Full collection (remaining 15 letters)
+## Stage 2 — Full collection (remaining letters)  ✅ DONE (`b654aaa`, 24 letters × 10 sessions, validated clean)
 
 **Goal:** complete the 24-letter static dataset.
 
@@ -76,7 +81,7 @@ plus A's existing extra session), balance check clean, all committed.
 
 ---
 
-## Stage 3 — Retrain + honest evaluation
+## Stage 3 — Retrain + honest evaluation  ✅ DONE (`632814a`, NN 87.9% test)
 
 **Goal:** a defensible results section for 24 classes.
 
@@ -94,7 +99,7 @@ splits, and README-able numbers exist (test accuracy + per-class table).
 
 ---
 
-## Stage 4 — Apps, docs, ship
+## Stage 4 — Apps, docs, ship  🔄 IN PROGRESS (README updated; live app camera-test pending)
 
 **Goal:** the live demo and public repo reflect the 24-letter reality.
 

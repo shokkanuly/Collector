@@ -1,6 +1,8 @@
 # Real-Time Sign Language Recognizer (Milestone 1)
 
-A lightweight, high-performance sign language recognizer that runs locally on your CPU. This repository contains the complete end-to-end pipeline for **Milestone 1**: recognizing static letters **A, B, C, D, and E** using Google's MediaPipe hand-tracking and machine learning classifiers.
+A lightweight, high-performance sign language recognizer that runs locally on your CPU. This repository contains the complete end-to-end pipeline for **Milestone 1**: recognizing the **24 static letters** of the ASL fingerspelling alphabet using Google's MediaPipe hand-tracking and machine learning classifiers.
+
+> **Scope — 24 of 26 letters.** `J` and `Z` are intentionally excluded: in ASL fingerspelling they are *motion* gestures (J traces a hook, Z draws a zigzag), so a single-frame static-pose classifier structurally cannot represent them. They are deferred to the Milestone-2 sequence model. All other letters (`A`–`Y` except `J`) are supported.
 
 ---
 
@@ -35,13 +37,20 @@ The project consists of two main workflows:
 Collect your custom training dataset. To ensure robustness, you will record **8–10 short sessions** of 2-3 seconds each for each letter. 
 Between sessions, you'll have 2 seconds to adjust your hand's angle, distance, and lighting.
 
-Run the collection script:
+Run the collection script for a single letter (interactive):
 ```bash
 python data_collection.py
 ```
-- Select which label you want to collect (`A`, `B`, `C`, `D`, or `E`).
+- Enter which letter to collect (`A`–`Z`, except `J`/`Z`, which are refused with an explanation).
 - Position your hand in the screen when the countdown starts.
-- Once completed, the landmarks and class labels are appended with a unique `session_id` into `landmarks_dataset.csv`.
+- Landmarks and labels are appended with a unique `session_id` into `landmarks_dataset.csv`. Re-running a letter auto-continues its session numbering (e.g. `F_11`), so recordings never collide.
+
+Or collect several letters in one run (batch mode) — pass a letter string:
+```bash
+python data_collection.py MNST          # the four fist-cluster letters
+python data_collection.py ABCDEFGHIJKLMNOPQRSTUVWXYZ   # whole alphabet
+```
+Batch mode walks each letter in turn, auto-skips `J`/`Z`, and offers to skip any letter that already has 10+ sessions — so passing the entire alphabet is safe.
 
 ---
 
@@ -52,11 +61,19 @@ python train.py
 ```
 This script will:
 - Load `landmarks_dataset.csv`.
-- Perform a **session-based split** (75% train / 25% test) to prevent data leakage and guarantee valid evaluation.
+- Perform a **session-based train / validation / test split** (~70/15/15, whole sessions held out) to prevent data leakage. The validation set selects the best epoch checkpoint *and* the winning model; the test set is evaluated exactly once, so the reported accuracy is not inflated by selecting on the data it reports.
 - Train a **Random Forest** (baseline) and a **PyTorch Neural Network** (improved model).
-- Compare accuracies and output class metrics.
 - Export `best_model.pth`, `random_forest.joblib`, and `label_map.joblib`.
-- Generate a confusion matrix plot at `evaluation_confusion_matrix.png`.
+- Generate a confusion matrix plot at `evaluation_confusion_matrix.png` (figure size scales with the class count).
+
+### Results (24-letter model)
+
+| Model | Val accuracy | Test accuracy |
+|-------|-------------|---------------|
+| Random Forest (baseline) | 83.5% | 85.7% |
+| **PyTorch NN (winning)** | **85.4%** | **87.9%** |
+
+Test accuracy is on a held-out set of sessions the model never trained or validated on. Strongest letters (F1 ≈ 1.0): `D`, `M`, `N`, `O`, `Q`. Known confusion pairs — all consistent with genuine ASL fingerspelling ambiguity — are `F↔B`, `L↔G`, `U↔V`, and the `A`/`S`/`T` closed-fist cluster (they differ mainly by thumb position). These are documented rather than hidden; `F→B` is the largest single error and the priority for further data collection.
 
 ---
 
@@ -75,7 +92,7 @@ This opens a dashboard in your browser with sidebar controls.
 ```bash
 streamlit run app_streamlit.py
 ```
-*(Note: Requires browser camera permissions. Falls back to a desktop client recommendation if WebRTC is not supported on the host system.)*
+*(Note: Requires browser camera permissions. Falls back to a desktop client recommendation if WebRTC is not supported on the host system. The OpenCV desktop client is the recommended demo surface — it is lower-latency and does not depend on WebRTC.)*
 
 ---
 

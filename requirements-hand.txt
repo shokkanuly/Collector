@@ -1,0 +1,6 @@
+# Collector Hand (robotic hand) extras, installed on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-hand.txt
+# The recognizer runs without these; everything under hand/ is optional.
+pyserial>=3.5   # SerialLink (imported lazily)
+pyyaml>=6       # config/hand.yaml
+pytest>=7       # test runner for tests/hand

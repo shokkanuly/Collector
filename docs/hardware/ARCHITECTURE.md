@@ -197,6 +197,12 @@ Found by running the kinematics sketch over `landmarks_dataset.csv`:
 2. Board: Uno (recommended; plenty for 8 channels) or ESP32 (adds Wi-Fi/BLE later, but runs at 3.3 V logic; the PCA9685 is fine with that)?
 3. Is the spread servo (ch 6) worth the mechanical work, or should U/V/R be accepted as ambiguous in v1?
 4. Should mirror mode ship in v1, or come after letter mode is solid?
+5. **Where do the REST angles live?** (Found while writing the firmware model in stage 1; needed before stage 3.) `H` and the watchdog drive to REST inside the firmware, but "open hand" in servo degrees depends on the calibration and `invert` flags in `config/hand.yaml`: with today's defaults the index is open at 0° while the inverted middle finger is open at 180°. Options:
+   - (a) Generate `firmware/collector_hand/hand_config.h` from `config/hand.yaml` plus the REST pose in `poses.json`, like the standalone table in PROTOCOL.md §5. This keeps one source of truth and needs no protocol change, but you reflash after each calibration. **Recommended.**
+   - (b) Add a protocol command that sets REST at runtime, sent after every `READY`. No reflash, but it is a v2 protocol change, and the watchdog REST before Python connects is still a compiled-in guess.
+   - (c) Define REST as "every horn at 90°" (the assembly neutral, WIRING.md §5) and let Python send the real open pose. Simplest, but the hand then goes to a half-closed pose on a watchdog relax.
+
+   Until this is decided, `FirmwareSim` uses 90° on every channel.
 
 ---
 

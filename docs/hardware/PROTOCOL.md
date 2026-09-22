@@ -69,3 +69,14 @@ The angles are illustrative. Real values depend on the calibration and `invert` 
 → C 6 200                ← OK C       (clamped to HARD_MAX[6])
 (3 s silence)            ← WDT
 ```
+
+## 7. State and recovery rules
+
+`FirmwareSim` in `hand/link.py` models these rules. It is the reference the sketch is bench-tested against (ROADMAP stage 3).
+
+- After boot the servos are limp (PWM off) until the first `S`, `C`, or `H`.
+- Every command that parses feeds the watchdog, including one refused with `ERR 4`. Lines answered with `ERR 1`–`ERR 3` do not.
+- The watchdog is armed by the first valid command after boot. It fires once (`WDT`), drives to REST, cuts PWM 1 s later, and stays quiet until the next valid command.
+- After `X` or a watchdog relax, the next `S`, `C`, or `H` re-enables PWM; no re-arm is needed. Only the E-stop latches: while it is active, `S`, `C`, and `L` get `ERR 4`, while `P`, `Q`, `V`, and `X` still work. `H` clears it.
+- If no `READY` arrives within 2.5 s (a board that did not auto-reset), Python sends `P` and accepts `PONG` instead. A `READY` with another version or channel count is refused.
+- Before each command, Python discards replies that arrived after their ack timeout, so a late `OK` is never taken as the answer to the next command.

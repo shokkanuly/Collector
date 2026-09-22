@@ -36,6 +36,8 @@ MIDDLE = (9, 10, 11, 12)
 RING = (13, 14, 15, 16)
 PINKY = (17, 18, 19, 20)
 FINGER_LANDMARKS = {"index": INDEX, "middle": MIDDLE, "ring": RING, "pinky": PINKY}
+# Feature columns of landmarks_dataset.csv, as written by data_collection.py.
+LANDMARK_COLUMNS = tuple(f"l{i}_{axis}" for i in range(N_LANDMARKS) for axis in "xyz")
 
 
 def _unit_float(name: str, value: Any, lo: float, hi: float) -> float:

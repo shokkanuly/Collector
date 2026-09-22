@@ -42,29 +42,30 @@ class Range:
 
 
 # ---------------------------------------------------------------- frozen normalization
-# 2nd/98th percentiles over landmarks_dataset.csv (3,765 rows, 24 letters),
-# recomputed by dataset_ranges().
+# Measured on landmarks_dataset.csv (3,765 rows, 24 letters) and recomputed by
+# dataset_ranges(), so a changed dataset shows up as drift in the tests.
 #
-# Curl ranges are per finger. MediaPipe's index never reads as bent as the other
-# fingers in a fist (98th percentile 232 deg against 302-317), and each finger
-# has its own servo, so curl_01 = 1 has to mean "this finger's full fist".
-CURL_RANGE_DEG = {
-    "index": Range(9.4, 231.7),
-    "middle": Range(7.3, 317.2),
-    "ring": Range(7.2, 309.2),
-    "pinky": Range(8.0, 301.9),
-}
+# Curl uses one range for all four fingers, anchored on what the letters mean:
+# 0 = the median finger that ASL extends (17.4 deg), 1 = the median finger of a
+# full fist, A and S (240.9 deg). One shared range keeps partial shapes even:
+# C reads 0.60-0.66 on every finger. Stage 2 first used per-finger 2nd/98th
+# percentiles, which read the index ~30% more curled than the other fingers at
+# the same angle and made C and O lopsided. Fingers tucked under the thumb read
+# low (median 196 deg, ~0.8); build_poses.py closes those fully through
+# hand/handshapes.py.
+CURL_RANGE_DEG = Range(17.4, 240.9)
+# 2nd/98th percentiles over all frames.
 THUMB_FLEX_RANGE_DEG = Range(14.0, 133.6)
 # Thumb tip (4) to pinky MCP (17): far (thumb out, L) -> 0, close (across the palm, M) -> 1.
 THUMB_OPP_RANGE = Range(1.82, 0.21)
 # Taken only over frames where index and middle are both extended. Elsewhere the
 # angle between their proximal phalanges measures flexion, not abduction
 # (G, P, Q, X read 70-120 deg), and would swamp the range.
-SPREAD_RANGE_DEG = Range(1.1, 16.9)
+SPREAD_RANGE_DEG = Range(1.1, 17.1)
 EXTENDED_CURL_01 = 0.25
 # Spread fades from measured to 0 as the more-curled of index/middle goes from
-# curl_01 0.25 to 0.45, the gap between letters with both fingers extended
-# (median at most 0.22, H) and letters with one curled (at least 0.52, P).
+# curl_01 0.25 to 0.45, inside the gap between letters with both fingers
+# extended (median at most 0.20, H) and letters with one curled (at least 0.59, O).
 # Abduction of a curled finger is undefined; 0 (together) is how a fist sits.
 SPREAD_FADE_CURL_01 = (0.25, 0.45)
 WRIST_ROLL_FULL_DEG = 90.0  # palm edge-on to the camera -> wrist_roll = +-1
@@ -72,9 +73,8 @@ WRIST_ROLL_FULL_DEG = 90.0  # palm edge-on to the camera -> wrist_roll = +-1
 
 def frozen_ranges() -> Dict[str, Range]:
     """The constants above, keyed like dataset_ranges()."""
-    ranges = {f"curl.{f}": CURL_RANGE_DEG[f] for f in FINGERS}
-    ranges.update(thumb_flex=THUMB_FLEX_RANGE_DEG, thumb_opp=THUMB_OPP_RANGE, spread=SPREAD_RANGE_DEG)
-    return ranges
+    return {"curl": CURL_RANGE_DEG, "thumb_flex": THUMB_FLEX_RANGE_DEG,
+            "thumb_opp": THUMB_OPP_RANGE, "spread": SPREAD_RANGE_DEG}
 
 
 # ---------------------------------------------------------------- geometry helpers
@@ -163,10 +163,8 @@ def wrist_roll_deg(landmarks):
 # ---------------------------------------------------------------- HandPose fields
 
 def curl_01(landmarks):
-    """Per-finger curl, 0 = straight, 1 = this finger's full fist. (4,) or (N, 4)."""
-    deg = np.atleast_2d(curl_deg(landmarks))
-    out = np.stack([CURL_RANGE_DEG[f].to_01(deg[:, i]) for i, f in enumerate(FINGERS)], axis=-1)
-    return _one_or_many(landmarks, out)
+    """Per-finger curl, 0 = extended, 1 = a full fist. (4,) or (N, 4)."""
+    return CURL_RANGE_DEG.to_01(curl_deg(landmarks))
 
 
 def thumb_flex_01(landmarks):
@@ -225,20 +223,25 @@ def pose_from_landmarks(landmarks) -> HandPose:
 
 # ---------------------------------------------------------------- recomputing the ranges
 
-def dataset_ranges(landmarks, lo_pct: float = 2.0, hi_pct: float = 98.0) -> Dict[str, Range]:
-    """Recompute every normalization range from a batch, the way the constants were made."""
+def dataset_ranges(landmarks, labels, lo_pct: float = 2.0, hi_pct: float = 98.0) -> Dict[str, Range]:
+    """Recompute every normalization range from a labeled batch, the way the constants were made.
+
+    The curl anchors need the letters: which fingers ASL extends, and which rows are fists.
+    """
+    from .handshapes import EXTENDED, FIST_LETTERS, HANDSHAPES
+
     batch = np.atleast_2d(np.asarray(landmarks, dtype=float))
+    labels = np.asarray(labels)
     curl = curl_deg(batch)
-    ranges = {}
-    for i, finger in enumerate(FINGERS):
-        lo, hi = np.percentile(curl[:, i], [lo_pct, hi_pct])
-        ranges[f"curl.{finger}"] = Range(float(lo), float(hi))
+    states = np.array([HANDSHAPES[label].fingers for label in labels])
+    fists = np.isin(labels, FIST_LETTERS)
+    ranges = {"curl": Range(float(np.median(curl[states == EXTENDED])), float(np.median(curl[fists])))}
     lo, hi = np.percentile(thumb_flex_deg(batch), [lo_pct, hi_pct])
     ranges["thumb_flex"] = Range(float(lo), float(hi))
     lo, hi = np.percentile(thumb_pinky_dist(batch), [lo_pct, hi_pct])
     ranges["thumb_opp"] = Range(float(hi), float(lo))  # inverse: far = 0
-    extended = ((ranges["curl.index"].to_01(curl[:, 0]) < EXTENDED_CURL_01)
-                & (ranges["curl.middle"].to_01(curl[:, 1]) < EXTENDED_CURL_01))
+    extended = ((ranges["curl"].to_01(curl[:, 0]) < EXTENDED_CURL_01)
+                & (ranges["curl"].to_01(curl[:, 1]) < EXTENDED_CURL_01))
     lo, hi = np.percentile(spread_deg(batch)[extended], [lo_pct, hi_pct])
     ranges["spread"] = Range(float(lo), float(hi))
     return ranges

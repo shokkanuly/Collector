@@ -2,7 +2,7 @@
 
 Same rules as the main `ROADMAP.md`: do one stage at a time, commit after each step, and "done when" is the gate. Stages 0–2 need no hardware, so they can start today.
 
-**Progress (2026-09-22):** stages 0–2 ✅, the whole Python side that needs no hardware. `pytest tests/hand`: 109 passed; `test_pipeline.py`: OK. Stage 3 needs the Arduino, the PCA9685, and one servo, plus an answer to ARCHITECTURE §10.5 (where REST angles live). §10.6 (wrist pitch) can wait for the stage-5 read-back numbers.
+**Progress (2026-09-22):** stages 0–2 ✅, the whole Python side that needs no hardware. `pytest tests/hand`: 117 passed; `test_pipeline.py`: OK. Stage 3 needs the Arduino, the PCA9685, and one servo, plus an answer to ARCHITECTURE §10.5 (where REST angles live). §10.6 (wrist pitch) can wait for the stage-5 read-back numbers.
 
 ---
 
@@ -41,6 +41,13 @@ Same rules as the main `ROADMAP.md`: do one stage at a time, commit after each s
 - Overrides: F, G, H, L, plus no-op P and Q entries that record the missing wrist pitch (§10.6). §9.4 decision: keep 3D (L's bent index is not z-noise).
 - `hand/pose_library.py` and `hand/mapping.py` were built here: no stage lists them, but §8's tests (`test_poses_json`, `test_mapping`) need them. `test_controller` waits for `HandController` in stage 5.
 - `test_poses_json` compares `poses.json` with a fresh build, so a stale file fails after any change to the dataset, the kinematics, or the overrides.
+
+**Naturalness pass** (after stage 2, on request). A review found that 42 of the 51 fingers ASL closes came out half-closed (0.55–0.80), because MediaPipe under-reads fingers tucked under the thumb. On the robot they would have stuck straight out from the palm, in U, V, K, R, I, Y, and more. Fixes:
+- `hand/handshapes.py`: the ASL handshape of every letter. `build_poses.py` shapes definitive states to exactly 0 or 1 and keeps the measured curl only for partial shapes.
+- One curl range anchored on extended fingers and A/S fists, replacing the per-finger ranges that made C and O lopsided.
+- Overrides copy by letter name. Y's thumb now sticks out like L's, and H's thumb sits over the tucked fingers like U's. L needs no override any more.
+- REST is a relaxed hand (the natural resting cascade), not a flat board.
+- `scripts/render_poses.py` draws every pose into `reports/poses_preview.png`, and `test_handshapes` fails if any pose leaves its handshape.
 
 ## Stage 3: Firmware + bench test (hardware: Arduino + PCA9685 + 1 servo)
 

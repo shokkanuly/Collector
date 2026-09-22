@@ -39,8 +39,8 @@ class TestPosesJson(unittest.TestCase):
             with self.subTest(letter=letter):
                 self.assertTrue(override.get("reason", "").strip())
                 entry = self.doc["poses"][letter]
-                self.assertEqual(entry["source"], "dataset+override")
                 self.assertTrue(entry["overridden"])
+                self.assertEqual(entry["reason"], override["reason"].strip())
 
     def test_motion_letters_are_stubs_with_a_note(self):
         for letter in "JZ":
@@ -65,8 +65,14 @@ class TestPoseLibrary(unittest.TestCase):
         self.assertNotIn(5, self.lib)
 
     def test_named_poses(self):
-        self.assertEqual(self.lib.rest, HandPose(curl=(0, 0, 0, 0), thumb_flex=0, thumb_opp=0, spread=0))
-        self.assertEqual(self.lib.open.spread, 1.0)
+        rest, open_hand = self.lib.rest, self.lib.open
+        # REST is a relaxed hand: slightly bent, more toward the pinky, thumb relaxed.
+        self.assertEqual(list(rest.curl), sorted(rest.curl))
+        self.assertTrue(all(0.05 <= c <= 0.3 for c in rest.curl))
+        self.assertLessEqual(rest.thumb_flex, 0.3)
+        self.assertEqual(rest.wrist_roll, 0.0)
+        # OPEN is the flat, spread "5" hand.
+        self.assertEqual(open_hand, HandPose(curl=(0, 0, 0, 0), thumb_flex=0, thumb_opp=0, spread=1))
 
     def test_unknown_names_raise(self):
         for name in ("?", "1", "AB", ""):

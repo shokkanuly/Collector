@@ -60,6 +60,7 @@ class ServoFrame:            # hardware-specific
 | `types.py` | `HandPose`, `ServoFrame`, constants (landmark indices) | none |
 | `kinematics.py` | `pose_from_landmarks(np.ndarray[63]) -> HandPose` | numpy |
 | `pose_library.py` | load `poses.json`; `pose_for(letter) -> HandPose`; open/rest poses | types |
+| `handshapes.py` | ASL handshape per letter (each finger extended/closed/partial, thumb and spread state); shapes dataset poses and checks naturalness | types |
 | `mapping.py` | `ServoMapper(config).to_frame(HandPose) -> ServoFrame` (calibration, inversion, clamping) | yaml |
 | `protocol.py` | encode and decode PROTOCOL.md lines; pure functions, no I/O | none |
 | `link.py` | `SerialLink(port)` and `MockLink()` behind one `Link` interface; reconnect, ack timeout | pyserial (lazy) |
@@ -81,8 +82,8 @@ All five functions are pure and vectorized (they accept `(N,63)`), so `build_pos
 
 **As built in stage 2** (`hand/kinematics.py`). Three changes from the sketch above, each forced by the dataset:
 
-- **Curl is normalized per finger**, with p2/p98 of index 9.4/231.7°, middle 7.3/317.2°, ring 7.2/309.2°, pinky 8.0/301.9°. MediaPipe's index never reads as bent as the other fingers in a fist, and each finger has its own servo, so `curl_01 = 1` must mean "this finger's full fist". A single shared range would never fully close the robot's index, and T's index would read 0.59, failing the stage-2 gate.
-- **Spread is normalized over frames where index and middle are both extended** (p2/p98 = 1.1/16.9°), and it fades to 0 as either finger curls (`curl_01` 0.25 → 0.45, the gap between letters with both fingers extended, median at most 0.22 for H, and letters with one curled, at least 0.52 for P). When one finger is curled, the angle between the proximal phalanges measures flexion, not abduction: G/P/Q/X read 70–120°. A range over all frames therefore squashed U and V to 0.04 apart, while the extended-only range gives U 0.10 and V 0.43. The U and V session medians never overlap (U ≤ 5.2°, V ≥ 6.1°), so the metric itself works; this signer's V is simply narrow.
+- **Curl uses one range for all four fingers, anchored on what the letters mean:** 17.4° (the median finger that ASL extends) → 0, and 240.9° (the median finger of the A and S fists) → 1. The same bend then reads the same on every finger, so partial shapes stay even: C is 0.60–0.66 on all four fingers. *Revised in the naturalness pass:* stage 2 first used per-finger p2/p98 ranges, which read the index about 30% more curled than the other fingers at the same angle and made C and O lopsided. The ranges' one advantage, letting the index close fully, is now handled by shaping (§4.2). The p2/p98 of all fingers pooled (7.7/303.9°) was never an option: it drops T's index to 0.59, below the gate.
+- **Spread is normalized over frames where index and middle are both extended** (p2/p98 = 1.1/17.1°), and it fades to 0 as either finger curls (`curl_01` 0.25 → 0.45, inside the gap between letters with both fingers extended, median at most 0.20 for H, and letters with one curled, at least 0.59 for O). When one finger is curled, the angle between the proximal phalanges measures flexion, not abduction: G/P/Q/X read 70–120°. A range over all frames therefore squashed U and V to 0.04 apart, while the extended-only range gives U 0.10 and V 0.42. The U and V session medians never overlap (U ≤ 5.2°, V ≥ 6.1°), so the metric itself works; this signer's V is simply narrow.
 - **Wrist roll comes from the palm normal**, `atan2(n_x, n_z)` with `n = (5−0) × (17−0)`, where 0 means the palm faces the camera. `HandPose.wrist_roll` is defined by where the palm faces. The in-plane angle of 0→9 measures tilt within the image and is blind to roll. In the data, H's palm faces sideways (median normal x 0.72), which the palm normal detects.
 
 Also: angles use `atan2(|u×v|, u·v)`, not `acos`, because `acos` of a rounded cosine is inaccurate near 0°, exactly where straight fingers sit. The ranges are frozen in `kinematics.py` so one live frame maps the way the dataset did. `dataset_ranges()` recomputes them, and a test fails if the dataset drifts more than 2% from the frozen values. MediaPipe's x and y are fractions of the image width and height, so the hand is slightly stretched along x on a non-square camera. The frozen ranges absorb this because the dataset and the demo share the camera.
@@ -93,9 +94,10 @@ Also: angles use `atan2(|u×v|, u·v)`, not `acos`, because `acos` of a rounded 
 1. Load `landmarks_dataset.csv` and run `kinematics` on every row.
 2. For each letter, take the **median** of each `HandPose` field across all sessions. The median is robust to bad frames.
 3. Report per-letter spread (IQR). A wide IQR means signers were inconsistent or the letter is ambiguous for this hand.
-4. Apply `hand/pose_overrides.json` field by field. It holds hand-authored corrections with a `reason` string each.
-5. Add `J`, `Z` (motion stubs), `REST`, and `OPEN`.
-6. Write `hand/poses.json`, sorted, with the dataset hash and date, so a stale table is detectable.
+4. **Shape** each letter with its ASL handshape (`hand/handshapes.py`, added in the naturalness pass). A finger that ASL extends becomes exactly 0 and one it closes exactly 1, and the index–middle spread becomes together (0) or apart (0.8). Only partial fingers (the curves of C, O, and D, E's bend, the fold of M and N, X's hook, T's index over the thumb) keep the measured curl. Two facts force this. MediaPipe reads a finger tucked under the thumb at a median 196° against a fist's 241°, so 42 of the 51 fingers that ASL closes came out 0.55–0.80 and would stop half-bent on the robot, sticking straight out from the palm. And the robot has one servo per finger, so "closed" is a single end stop, not a range. The report lists recordings that contradict a handshape outright (F, G, and L today) as letters to recollect; `test_handshapes` fails if a new one appears.
+5. Apply `hand/pose_overrides.json` field by field. It holds hand-authored corrections with a `reason` string each. A value may be a letter name, which copies that letter's shaped value (`"thumb_opp": "L"`), so an override follows the data instead of freezing a number.
+6. Add `J`, `Z` (motion stubs), `REST` (a relaxed hand: curl 0.12 → 0.26 from index to pinky, thumb relaxed, spread 0.2, the natural resting cascade), and `OPEN` (the flat, spread "5" hand).
+7. Write `hand/poses.json`, sorted, with the dataset hash and date, so a stale table is detectable. `scripts/render_poses.py` draws every pose as a skeleton (`reports/poses_preview.png`) so naturalness can be checked by eye before any hardware exists.
 
 The dataset already gives usable poses for most letters. Appendix A shows the first pass.
 
@@ -188,6 +190,7 @@ Firmware `firmware/collector_hand/collector_hand.ino` behaves as follows:
 - `tests/hand/test_protocol.py`: encode/decode round-trip, malformed lines rejected, max line length.
 - `tests/hand/test_controller.py` with `MockLink`: latest-wins drops stale frames, rate cap holds, REST after timeout, reconnect.
 - `tests/hand/test_poses_json.py`: `poses.json` covers all 26 letters plus REST/OPEN, and its dataset hash matches the CSV.
+- `tests/hand/test_handshapes.py`: every letter pose matches its ASL handshape (closed fingers exactly 1, extended exactly 0, thumb and spread inside their state's range), C/O/E curve every finger alike, and no new recording contradicts ASL unnoticed.
 - Firmware: `scripts/serial_selftest.py --port ...` (ping, sweep each channel 90→60→90, check `OK`s). This is the manual bench test in ROADMAP stage 3.
 
 ## 9. Findings from your dataset (read before building)
@@ -209,7 +212,7 @@ Found by running the kinematics sketch over `landmarks_dataset.csv`:
    | G | 51.1° | 47.5° | 85.2° | 81.6° |
    | B (reference) | 7.0° | 5.1° | 15.0° | 10.2° |
 
-   Dropping z changes L by 2°, so depth is not what bends it. In the image plane, L's index points 154° away from "up" with its tip below the wrist, while the wrist→index-MCP line points −48°: the recorded index is folded about 100° against the palm. Like F, this is a recording or tracking problem with this letter, not noise to filter. A 2D fallback isn't free either: dropping depth moves C's index curl from 159° to 177°, because C's fingers curve toward the camera and a projected angle distorts in either direction. L's index comes from `pose_overrides.json`, straight like K's. Recollect L with the index pointing up and the palm to the camera.
+   Dropping z changes L by 2°, so depth is not what bends it. In the image plane, L's index points 154° away from "up" with its tip below the wrist, while the wrist→index-MCP line points −48°: the recorded index is folded about 100° against the palm. Like F, this is a recording or tracking problem with this letter, not noise to filter. A 2D fallback isn't free either: dropping depth moves C's index curl from 159° to 177°, because C's fingers curve toward the camera and a projected angle distorts in either direction. L's index is straightened by its handshape (§4.2), which ASL defines as extended. Recollect L with the index pointing up and the palm to the camera.
 
 ## 10. Open decisions (ask the user)
 

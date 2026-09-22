@@ -18,7 +18,7 @@ The contract between `hand/protocol.py` and `firmware/collector_hand`. Any chang
 |---|---|---|---|
 | `S a0 a1 … a7` | `S 90 120 0 0 0 0 90 90` | Set the target angle (integer degrees 0–180) for all 8 channels. The firmware slews toward it. | `OK` |
 | `C ch a` | `C 3 145` | Set one channel only (calibration). | `OK` |
-| `H` | `H` | Home: go to REST pose (open hand, thumb out, wrist 90) and re-enable PWM after an E-stop. | `OK` |
+| `H` | `H` | Home: go to REST pose (a relaxed open hand, wrist 90) and re-enable PWM after an E-stop. | `OK` |
 | `X` | `X` | Relax: PWM off on all channels (servos go limp). | `OK` |
 | `P` | `P` | Ping. | `PONG` |
 | `Q` | `Q` | Query current angles. | `A 90 118 3 0 …` (8 values) |

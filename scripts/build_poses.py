@@ -3,14 +3,21 @@
     python scripts/build_poses.py
 
 Reads landmarks_dataset.csv (never writes it; CLAUDE.md rule 3), runs
-hand.kinematics over every row, takes each letter's median pose, applies the
-hand-authored corrections in hand/pose_overrides.json field by field, then adds
-the motion stubs J and Z and the named poses REST and OPEN.
+hand.kinematics over every row, and takes each letter's median pose. Then:
+
+1. shape: fingers that ASL extends or closes get exactly 0 or 1, and the
+   index-middle spread gets its together/apart value (hand/handshapes.py).
+   MediaPipe reads tucked fingers as half-closed, so the raw medians would
+   leave them sticking out; partial shapes keep the measured curl.
+2. override: hand-authored corrections from hand/pose_overrides.json, field by
+   field. A value may name another letter to copy that letter's shaped value.
+3. add the motion stubs J and Z and the named poses REST and OPEN.
 
 hand/poses.json is the single pose source of truth (CLAUDE.md rule 4). Never
-edit it by hand: change the overrides (or the dataset) and rebuild.
+edit it by hand: change the overrides, the handshapes, or the dataset, and rebuild.
 """
 import argparse
+import copy
 import datetime
 import hashlib
 import json
@@ -23,7 +30,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hand import kinematics  # noqa: E402
+from hand import handshapes, kinematics  # noqa: E402
 from hand.types import FINGERS, LANDMARK_COLUMNS, HandPose  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -35,11 +42,14 @@ REPORT = os.path.join(REPO_ROOT, "reports", "poses_report.md")
 FIELDS = ("curl", "thumb_flex", "thumb_opp", "spread", "wrist_roll")
 WIDE_IQR = 0.25  # flagged in the report: signers were inconsistent or the letter is ambiguous
 
-# Named poses with no dataset source (PROTOCOL.md `H` goes to REST).
-# REST: every tendon slack (each channel at its calibrated open end), thumb out,
-# wrist neutral; the lowest-stress pose. OPEN: the "5" handshape, fingers spread.
+# Named poses with no dataset source.
+# REST (PROTOCOL.md `H`, and idle between words): a relaxed hand, with the
+# fingers slightly bent and more so toward the pinky (the natural resting
+# cascade), the thumb relaxed between out and beside, and every tendon near
+# slack. A dead-flat hand looks stiff. OPEN: the "5" handshape, all fingers
+# straight and spread, thumb out.
 NAMED_POSES = {
-    "REST": HandPose(curl=(0, 0, 0, 0), thumb_flex=0, thumb_opp=0, spread=0, wrist_roll=0),
+    "REST": HandPose(curl=(0.12, 0.16, 0.21, 0.26), thumb_flex=0.15, thumb_opp=0.35, spread=0.2, wrist_roll=0),
     "OPEN": HandPose(curl=(0, 0, 0, 0), thumb_flex=0, thumb_opp=0, spread=1, wrist_roll=0),
 }
 MOTION_NOTES = {
@@ -87,29 +97,42 @@ def dataset_pose(entry: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def apply_override(letter: str, pose: Dict[str, Any], override: Dict[str, Any]) -> List[str]:
-    """Overwrite fields of `pose` in place; return the names of the fields changed.
+def apply_override(letter: str, pose: Dict[str, Any], override: Dict[str, Any],
+                   sources: Dict[str, Dict[str, Any]]) -> List[str]:
+    """Overwrite fields of `pose` in place; return what changed, e.g. ["thumb_opp <- L"].
 
     `curl` may be a full list of 4 or a {finger: value} dict for single fingers.
+    A string value names a letter in `sources` to copy that field from.
     """
     if not str(override.get("reason", "")).strip():
         raise ValueError(f"override for {letter} has no reason")
+
+    def resolve(field: str, value: Any, finger: int = -1) -> Tuple[float, str]:
+        if isinstance(value, str):
+            ref = sources.get(value.upper())
+            if ref is None:
+                raise ValueError(f"override for {letter}: {value!r} is not a letter to copy from")
+            copied = ref["curl"][finger] if field == "curl" else ref[field]
+            return _r3(copied), f" <- {value.upper()}"
+        return _r3(value), ""
+
     changed = []
     for key, value in override.items():
         if key == "reason":
             continue
         if key == "curl" and isinstance(value, dict):
             for finger, v in value.items():
-                pose["curl"][FINGERS.index(finger)] = _r3(v)
-                changed.append(f"curl.{finger}")
+                i = FINGERS.index(finger)
+                pose["curl"][i], note = resolve("curl", v, i)
+                changed.append(f"curl.{finger}{note}")
         elif key == "curl":
             if len(value) != len(FINGERS):
                 raise ValueError(f"override for {letter}: curl needs {len(FINGERS)} values")
-            pose["curl"] = [_r3(v) for v in value]
+            pose["curl"] = [resolve("curl", v, i)[0] for i, v in enumerate(value)]
             changed.append("curl")
         elif key in FIELDS:
-            pose[key] = _r3(value)
-            changed.append(key)
+            pose[key], note = resolve(key, value)
+            changed.append(f"{key}{note}")
         else:
             raise ValueError(f"override for {letter}: unknown field {key!r}")
     return changed
@@ -133,25 +156,29 @@ def build(dataset_path: str = DATASET, overrides_path: str = OVERRIDES,
     stats = letter_stats(features, labels, df["session_id"].to_numpy())
 
     poses: Dict[str, Dict[str, Any]] = {}
+    disagreements: Dict[str, List[str]] = {}
     for letter, entry in stats.items():
-        poses[letter] = dict(dataset_pose(entry), source="dataset")
+        pose = dataset_pose(entry)
+        found = handshapes.recording_disagreements(letter, pose["curl"])
+        if found:
+            disagreements[letter] = found
+        shaped = handshapes.shape_pose(letter, pose)
+        poses[letter] = dict(pose, source="dataset", shaped=shaped)
 
     overrides = load_overrides(overrides_path)
+    sources = copy.deepcopy(poses)  # overrides copy shaped values, never each other's
     for letter, override in sorted(overrides.items()):
         if letter not in poses:
             raise ValueError(f"override for {letter!r}, which the dataset does not have")
-        changed = apply_override(letter, poses[letter], override)
-        poses[letter].update(source="dataset+override", overridden=changed,
-                             reason=override["reason"].strip())
+        changed = apply_override(letter, poses[letter], override, sources)
+        poses[letter].update(overridden=changed, reason=override["reason"].strip())
 
     # Motion stubs, built from the final static poses (after overrides).
-    poses["J"] = dict(poses["I"], source="motion-stub", motion=MOTION_NOTES["J"])
-    for key in ("overridden", "reason"):
-        poses["J"].pop(key, None)
-    z = {field: poses["S"][field] for field in FIELDS}
-    z["curl"] = [poses["D"]["curl"][0]] + poses["S"]["curl"][1:]  # D's index over S's fist
-    z["spread"] = 0.0
-    poses["Z"] = dict(z, source="motion-stub", motion=MOTION_NOTES["Z"])
+    poses["J"] = {field: copy.deepcopy(poses["I"][field]) for field in FIELDS}
+    poses["Z"] = {field: copy.deepcopy(poses["S"][field]) for field in FIELDS}  # S's thumb over the fist
+    for letter in ("J", "Z"):
+        shaped = handshapes.shape_pose(letter, poses[letter])
+        poses[letter].update(source="motion-stub", motion=MOTION_NOTES[letter], shaped=shaped)
     for name, pose in NAMED_POSES.items():
         poses[name] = dict(pose.to_dict(), source="named")
 
@@ -161,16 +188,16 @@ def build(dataset_path: str = DATASET, overrides_path: str = OVERRIDES,
     frozen = kinematics.frozen_ranges()
     doc = {
         "_comment": "Generated by scripts/build_poses.py. Do not edit: change "
-                    "hand/pose_overrides.json or the dataset and rebuild.",
-        "version": 1,
+                    "hand/pose_overrides.json, hand/handshapes.py, or the dataset and rebuild.",
+        "version": 2,
         "built": built or datetime.date.today().isoformat(),
         "dataset": {"path": "landmarks_dataset.csv", "sha256": sha256_of(dataset_path),
                     "rows": int(len(df)), "letters": len(stats)},
         "normalization": {key: [r.lo, r.hi] for key, r in frozen.items()},
         "poses": poses,
     }
-    numbers = {"stats": stats, "features": features, "labels": labels, "overrides": overrides,
-               "recomputed": kinematics.dataset_ranges(landmarks), "frozen": frozen}
+    numbers = {"stats": stats, "overrides": overrides, "disagreements": disagreements,
+               "recomputed": kinematics.dataset_ranges(landmarks, labels), "frozen": frozen}
     return doc, numbers
 
 
@@ -182,8 +209,17 @@ def _cell(stat, i=None) -> str:
     return f"{med:.2f} [{q1:.2f}–{q3:.2f}]{flag}"
 
 
+def unnatural(poses: Dict[str, Dict[str, Any]]) -> List[str]:
+    """Every handshape violation across the final letter poses."""
+    problems = []
+    for letter in handshapes.HANDSHAPES:
+        problems += handshapes.check(letter, HandPose.from_dict(poses[letter]))
+    return problems
+
+
 def gate_rows(poses: Dict[str, Dict[str, Any]], stats: Dict[str, Dict[str, Any]]) -> List[Tuple[str, str, bool]]:
-    """ROADMAP stage 2 "done when", checked on the dataset medians (before overrides)."""
+    """ROADMAP stage 2 "done when" on the dataset medians (before shaping), plus the
+    naturalness check on the final poses."""
     idx = {letter: float(stats[letter]["curl"][0][0]) for letter in stats}
     spread = {letter: float(stats[letter]["spread"][0]) for letter in stats}
     open_ok = all(idx[x] < 0.15 for x in "BWUV")
@@ -191,12 +227,21 @@ def gate_rows(poses: Dict[str, Dict[str, Any]], stats: Dict[str, Dict[str, Any]]
     diff = spread["V"] - spread["U"]
     names = set(poses)
     expected = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ") | {"REST", "OPEN"}
+    problems = unnatural(poses)
     return [
-        ("B/W/U/V index curl < 0.15", ", ".join(f"{x} {idx[x]:.3f}" for x in "BWUV"), open_ok),
-        ("A/S/T index curl > 0.6", ", ".join(f"{x} {idx[x]:.3f}" for x in "AST"), fist_ok),
-        ("V − U spread ≥ 0.3", f"{spread['V']:.3f} − {spread['U']:.3f} = {diff:.3f}", diff >= 0.3),
+        ("B/W/U/V index curl < 0.15 (dataset)", ", ".join(f"{x} {idx[x]:.3f}" for x in "BWUV"), open_ok),
+        ("A/S/T index curl > 0.6 (dataset)", ", ".join(f"{x} {idx[x]:.3f}" for x in "AST"), fist_ok),
+        ("V − U spread ≥ 0.3 (dataset)", f"{spread['V']:.3f} − {spread['U']:.3f} = {diff:.3f}", diff >= 0.3),
         ("poses.json has A–Z + REST + OPEN", f"{len(names & expected)}/{len(expected)}", expected <= names),
+        ("every letter matches its ASL handshape", "all 26" if not problems else "; ".join(problems),
+         not problems),
     ]
+
+
+def _handshape_code(letter: str) -> str:
+    spec = handshapes.HANDSHAPES[letter]
+    code = "".join({"extended": "E", "closed": "C", "partial": "P"}[s] for s in spec.fingers)
+    return f"{code} · thumb {spec.thumb} · {spec.spread}"
 
 
 def render_report(doc: Dict[str, Any], numbers: Dict[str, Any]) -> str:
@@ -207,9 +252,10 @@ def render_report(doc: Dict[str, Any], numbers: Dict[str, Any]) -> str:
         "",
         f"Generated by `scripts/build_poses.py` on {doc['built']} from `{ds['path']}` "
         f"({ds['rows']:,} rows, {ds['letters']} letters, sha256 `{ds['sha256'][:12]}…`). "
-        "Do not edit; rebuild instead.",
+        "Do not edit; rebuild instead. `python scripts/render_poses.py` draws every pose "
+        "into `reports/poses_preview.png`.",
         "",
-        "## Stage-2 gate",
+        "## Gate",
         "",
         "| Check | Value | Result |",
         "|---|---|---|",
@@ -219,10 +265,26 @@ def render_report(doc: Dict[str, Any], numbers: Dict[str, Any]) -> str:
 
     lines += [
         "",
-        "## Per-letter medians from the dataset (before overrides)",
+        "## Recordings that contradict the ASL handshape",
+        "",
+        "Measured curl (before shaping) that is the opposite state, not just MediaPipe's normal "
+        "under-read of tucked fingers. The final pose is correct either way; re-recording these "
+        "letters would make the data agree.",
+        "",
+    ]
+    if numbers["disagreements"]:
+        lines += ["| Letter | Handshape | Problem |", "|---|---|---|"]
+        for letter, found in sorted(numbers["disagreements"].items()):
+            lines.append(f"| {letter} | {_handshape_code(letter)} | {'; '.join(found)} |")
+    else:
+        lines.append("None.")
+
+    lines += [
+        "",
+        "## Per-letter medians from the dataset (before shaping)",
         "",
         "Median over every frame of the letter, IQR in brackets; ⚠ marks an IQR wider than "
-        f"{WIDE_IQR}. Curl: 0 = straight, 1 = fist. Thumb opp: 0 = out (L), 1 = across the palm (M). "
+        f"{WIDE_IQR}. Curl: 0 = extended, 1 = full fist. Thumb opp: 0 = out (L), 1 = across the palm (M). "
         "Spread: 0 = together (U), 1 = wide. Roll is measured from the palm normal "
         "(0 = palm to camera, ±1 = edge-on) and shown for information only: letters take "
         "orientation from overrides.",
@@ -235,7 +297,8 @@ def render_report(doc: Dict[str, Any], numbers: Dict[str, Any]) -> str:
         lines.append(f"| {letter} | {s['sessions']} | {curls} | {_cell(s['thumb_flex'])} | "
                      f"{_cell(s['thumb_opp'])} | {_cell(s['spread'])} | {s['wrist_roll'][0]:+.2f} |")
 
-    lines += ["", "## Overrides applied (`hand/pose_overrides.json`)", ""]
+    lines += ["", "## Overrides applied (`hand/pose_overrides.json`)", "",
+              "`field <- X` copies letter X's shaped value.", ""]
     if numbers["overrides"]:
         lines += ["| Letter | Fields | Reason |", "|---|---|---|"]
         for letter in sorted(numbers["overrides"]):
@@ -248,20 +311,27 @@ def render_report(doc: Dict[str, Any], numbers: Dict[str, Any]) -> str:
         "",
         "## Final poses (`hand/poses.json`)",
         "",
-        "| Pose | Index | Middle | Ring | Pinky | Thumb flex | Thumb opp | Spread | Roll | Source |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "Handshape: fingers index→pinky as E extended, C closed, P partial. *Shaped* lists the "
+        "values the handshape set; *overridden* the ones `pose_overrides.json` set.",
+        "",
+        "| Pose | Index | Middle | Ring | Pinky | Thumb flex | Thumb opp | Spread | Roll | Handshape | Shaped | Overridden |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name in sorted(poses, key=lambda n: (len(n) > 1, n)):
         p = poses[name]
         curls = " | ".join(f"{c:.2f}" for c in p["curl"])
+        code = _handshape_code(name) if name in handshapes.HANDSHAPES else p["source"]
+        shaped = ", ".join(f.replace("curl.", "") for f in p.get("shaped", [])) or "–"
+        overridden = ", ".join(p.get("overridden", [])) or "–"
         lines.append(f"| {name} | {curls} | {p['thumb_flex']:.2f} | {p['thumb_opp']:.2f} | "
-                     f"{p['spread']:.2f} | {p['wrist_roll']:+.2f} | {p['source']} |")
+                     f"{p['spread']:.2f} | {p['wrist_roll']:+.2f} | {code} | {shaped} | {overridden} |")
 
     lines += [
         "",
         "## Normalization ranges",
         "",
-        "Frozen in `hand/kinematics.py`; recomputed here from the dataset (2nd/98th percentiles). "
+        "Frozen in `hand/kinematics.py`; recomputed here from the dataset. Curl anchors are the median "
+        "extended finger and the median A/S fist finger; the others are 2nd/98th percentiles. "
         "`test_kinematics` fails if they drift apart by more than 2% of the range.",
         "",
         "| Range | Frozen | Recomputed |",
@@ -291,9 +361,9 @@ def main(argv=None) -> int:
     write_outputs(doc, report)
     print(f"Wrote {os.path.relpath(POSES_JSON, REPO_ROOT)} ({len(doc['poses'])} poses) "
           f"and {os.path.relpath(REPORT, REPO_ROOT)}")
-    failed = [check for check, _, ok in gate_rows(doc["poses"], numbers["stats"]) if not ok]
-    for check in failed:
-        print(f"GATE FAIL: {check}")
+    failed = [(check, value) for check, value, ok in gate_rows(doc["poses"], numbers["stats"]) if not ok]
+    for check, value in failed:
+        print(f"GATE FAIL: {check}: {value}")
     return 1 if failed else 0
 
 

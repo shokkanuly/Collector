@@ -71,13 +71,10 @@ class TestSyntheticGeometry(unittest.TestCase):
                 deg = k.curl_deg(synthetic_hand(flex_deg=(flex, 0, flex, 0)))
                 np.testing.assert_allclose(deg, [3 * flex, 0, 3 * flex, 0], atol=1e-9)
 
-    def test_curl_normalizes_per_finger(self):
-        for i, finger in enumerate(("index", "middle", "ring", "pinky")):
-            rng = k.CURL_RANGE_DEG[finger]
-            flex = [0, 0, 0, 0]
-            flex[i] = (rng.lo + rng.hi) / 2 / 3  # halfway through this finger's range
-            with self.subTest(finger=finger):
-                self.assertAlmostEqual(k.curl_01(synthetic_hand(flex_deg=flex))[i], 0.5, places=6)
+    def test_every_finger_shares_one_curl_range(self):
+        """The same bend reads the same on every finger, so partial shapes (C, O) stay even."""
+        half = (k.CURL_RANGE_DEG.lo + k.CURL_RANGE_DEG.hi) / 2 / 3  # per joint, halfway through the range
+        np.testing.assert_allclose(k.curl_01(synthetic_hand(flex_deg=(half,) * 4)), 0.5, atol=1e-9)
 
     def test_thumb_flex_sums_the_two_thumb_bends(self):
         self.assertAlmostEqual(k.thumb_flex_deg(synthetic_hand()), 0.0, places=6)
@@ -98,7 +95,7 @@ class TestSyntheticGeometry(unittest.TestCase):
     def test_spread_fades_to_zero_when_a_finger_curls(self):
         wide = dict(index_abduct_deg=10)
         self.assertGreater(k.spread_01(synthetic_hand(**wide)), 0.5)
-        curled = k.spread_01(synthetic_hand(flex_deg=(0, 70, 0, 0), **wide))  # middle curl_01 ~0.66
+        curled = k.spread_01(synthetic_hand(flex_deg=(0, 70, 0, 0), **wide))  # middle curl_01 ~0.86
         self.assertEqual(curled, 0.0)
 
     def test_wrist_roll_follows_the_palm(self):
@@ -195,7 +192,7 @@ class TestKinematicsOnDataset(unittest.TestCase):
 
     def test_frozen_ranges_still_match_the_dataset(self):
         """A dataset change that moves a percentile shows up here, not as silent drift."""
-        recomputed = k.dataset_ranges(self.X)
+        recomputed = k.dataset_ranges(self.X, self.labels)
         for key, frozen in k.frozen_ranges().items():
             width = abs(frozen.hi - frozen.lo)
             with self.subTest(range=key):

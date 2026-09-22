@@ -1,6 +1,6 @@
 # Collector Hand: Architecture
 
-Status: **design, not yet implemented**. Owner: shokkanuly. Last updated 2026-09-22.
+Status: **stages 0–2 implemented** (Python side, no hardware needed; see `docs/hardware/ROADMAP.md`). Stage 3 onward waits for hardware. Owner: shokkanuly. Last updated 2026-09-22.
 
 ## 1. Goal
 
@@ -42,7 +42,7 @@ Division of work: **the laptop decides what pose to make, and the Arduino makes 
 class HandPose:              # hardware-independent, all values normalized
     curl: tuple[float, float, float, float]   # index, middle, ring, pinky; 0 = straight, 1 = full fist
     thumb_flex: float        # 0 = straight, 1 = fully bent
-    thumb_opp: float         # 0 = beside index (A), 1 = across palm toward pinky (B, S)
+    thumb_opp: float         # 0 = out to the side (L, Y), 1 = across palm toward pinky (M, B); A sits between
     spread: float            # index–middle abduction; 0 = together (U), 1 = wide (V)
     wrist_roll: float        # -1 .. 1; 0 = palm facing viewer; ±1 = ±90°
     
@@ -195,9 +195,21 @@ Firmware `firmware/collector_hand/collector_hand.ino` behaves as follows:
 Found by running the kinematics sketch over `landmarks_dataset.csv`:
 
 1. **Your F recordings look like B.** In all 20 F sessions the index finger is straight (median bend 12°, same as B's 14°), and the thumb–index distance is ~1.0 (open, not pinched). A real F pinches the index tip to the thumb, with a distance of ~0.2 (compare O at 0.13–0.33). This explains the documented F→B confusion better than "ASL ambiguity" does. The fix is to recollect F with a clear index–thumb circle. Until then, F comes from `pose_overrides.json`.
+   *Confirmed in stage 2:* thumb-tip to index-tip distance is 0.95 for F (sessions 0.79–1.13) against 0.99 for B and 0.22 for O. The override copies O's index and thumb.
 2. **Orientation letters (G, H, P, Q)** aren't captured, because the landmarks are normalized and the wrist angle carries through only weakly. Their finger curls are right, but the wrist roll/pitch must come from overrides.
+   *Corrected in stage 2:* the conclusion holds, but the cause is different. `HandTracker` only translates and scales, so orientation survives normalization. The recordings themselves are upright: the wrist→9 direction for G, P, and Q is −5° to −7° from vertical, the same as every other letter. The exception is H, whose palm faces sideways (palm-normal roll +0.75 against a +0.15 baseline for all letters). The palm-normal roll in §4.1 detects that, and H's override keeps it. See §10.6 for what the hardware can show.
 3. **U vs V vs R** have near-identical curls. Only the spread metric separates them, so the spread must use proximal phalanges (§4.1), not fingertips.
+   *Confirmed in stage 2:* the proximal-phalanx angle separates every U session from every V session (U ≤ 5.2°, V ≥ 6.1°), but only after normalizing over frames with both fingers extended (§4.1). R reads between them (spread 0.27): its crossed fingers diverge, and the hand has no crossing DOF, so R looks like a slightly spread U.
 4. **L's index reads 76°** because the MediaPipe `z` depth is noisy when the hand is turned sideways. Consider a 2D (x, y) fallback for the MCP angle when |z| variance is high. Stage 2 decides this.
+   **Decision (stage 2): keep 3D; no 2D fallback.** The z-noise hypothesis does not hold. Medians over all frames of each letter:
+
+   | Letter | MCP bend, 3D | MCP bend, 2D (x, y) | Index curl, 3D | Index curl, 2D |
+   |---|---|---|---|---|
+   | L | 97.3° | 99.7° | 119.2° | 121.1° |
+   | G | 51.1° | 47.5° | 85.2° | 81.6° |
+   | B (reference) | 7.0° | 5.1° | 15.0° | 10.2° |
+
+   Dropping z changes L by 2°, so depth is not what bends it. In the image plane, L's index points 154° away from "up" with its tip below the wrist, while the wrist→index-MCP line points −48°: the recorded index is folded about 100° against the palm. Like F, this is a recording or tracking problem with this letter, not noise to filter. A 2D fallback isn't free either: dropping depth moves C's index curl from 159° to 177°, because C's fingers curve toward the camera and a projected angle distorts in either direction. L's index comes from `pose_overrides.json`, straight like K's. Recollect L with the index pointing up and the palm to the camera.
 
 ## 10. Open decisions (ask the user)
 
@@ -216,6 +228,8 @@ Found by running the kinematics sketch over `landmarks_dataset.csv`:
 ---
 
 ## Appendix A: first-pass servo angles from the dataset
+
+*Superseded by `reports/poses_report.md`, which `scripts/build_poses.py` generates with the stage-2 normalization. Kept as the historical first pass: it used one shared curl range of 10–270°.*
 
 Median per letter across all sessions, mapped linearly to 0–180° (0 = straight/open). This was produced by the §4.1 formulas before calibration, so it is for sanity-checking, not for flashing.
 

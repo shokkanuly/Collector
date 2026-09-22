@@ -2,7 +2,7 @@
 
 Same rules as the main `ROADMAP.md`: do one stage at a time, commit after each step, and "done when" is the gate. Stages 0–2 need no hardware, so they can start today.
 
-**Progress (2026-09-22):** stages 0–2 ✅, the whole Python side that needs no hardware. `pytest tests/hand`: 117 passed; `test_pipeline.py`: OK. Stage 3 needs the Arduino, the PCA9685, and one servo, plus an answer to ARCHITECTURE §10.5 (where REST angles live). §10.6 (wrist pitch) can wait for the stage-5 read-back numbers.
+**Progress (2026-09-22):** stages 0–2 ✅, the whole Python side that needs no hardware. `pytest tests/hand`: 122 passed; `test_pipeline.py`: OK. Still missing before a full hand can move: the firmware sketch (stage 3; `FirmwareSim` is its spec), the calibrate command and `hand_cli.py` (stage 4, which also flips `calibrated: true`), and `HandController` with the transition ordering of ARCHITECTURE §4.4 (stage 5). Stage 3 needs the Arduino, the PCA9685, and one servo, plus an answer to ARCHITECTURE §10.5 (where REST angles live). §10.6 (wrist pitch) can wait for the stage-5 read-back numbers.
 
 ---
 

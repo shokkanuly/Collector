@@ -25,6 +25,7 @@ class SimSerialPort:
     muted           the device stops answering: written bytes vanish
     broken          the cable is gone: every call raises OSError, like pyserial
     before_reply    bytes the device emits right before answering the next command
+    reply_delay_s   how long after a write its reply becomes readable
     """
 
     def __init__(self, sim: FirmwareSim, clock: FakeClock, *, resets_on_open: bool = True,
@@ -37,14 +38,16 @@ class SimSerialPort:
         self.muted = False
         self.broken = False
         self.before_reply = b""
+        self.reply_delay_s = 0.0  # replies become readable this long after the write
         self.written = bytearray()
+        self._visible_at = float("-inf")
         if resets_on_open:
             sim.boot()
 
     @property
     def in_waiting(self) -> int:
         self._check()
-        return self.sim.out_waiting
+        return self.sim.out_waiting if self.clock() >= self._visible_at else 0
 
     def write(self, data: bytes) -> int:
         self._check()
@@ -53,6 +56,7 @@ class SimSerialPort:
             self.sim.inject(self.before_reply)
             self.before_reply = b""
             self.sim.receive(bytes(data))
+            self._visible_at = self.clock() + self.reply_delay_s
         return len(data)
 
     def flush(self) -> None:
@@ -60,7 +64,7 @@ class SimSerialPort:
 
     def read(self, size: int = 1) -> bytes:
         self._check()
-        data = self.sim.read(min(size, self.chunk or size))
+        data = self.sim.read(min(size, self.chunk or size)) if self.clock() >= self._visible_at else b""
         if not data:
             self.clock.advance(self.timeout)  # a real port blocks for its timeout
         return data

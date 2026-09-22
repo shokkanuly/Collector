@@ -568,19 +568,25 @@ class SerialLink(Link):
             raise self._lost(e) from e
 
     def _read_line(self, deadline: Optional[float]) -> Optional[bytes]:
+        last_read = False
         while True:
             nl = self._rx.find(b"\n")
             if nl >= 0:
                 line = bytes(self._rx[:nl + 1])
                 del self._rx[:nl + 1]
                 return line
+            if last_read:
+                return None
             try:
                 waiting = self._ser.in_waiting
-                if deadline is None:
+                if deadline is None or self._clock() >= deadline:
+                    # Out of time (or never willing to wait): take only what has
+                    # already arrived, once. A reply landing right at the
+                    # deadline still counts, and a stream of noise can't keep
+                    # the loop alive.
                     if not waiting:
                         return None
-                elif self._clock() >= deadline:
-                    return None
+                    last_read = True
                 chunk = self._ser.read(max(1, waiting))  # blocks at most POLL_S
             except OSError as e:
                 raise self._lost(e) from e

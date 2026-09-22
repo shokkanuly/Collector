@@ -372,6 +372,45 @@ class TestSerialLink(unittest.TestCase):
         self.assertLess(waited, ACK_TIMEOUT_S + 2 * POLL_S)
         self.assertTrue(link.is_open)
 
+    def test_reply_arriving_exactly_at_the_deadline_still_counts(self):
+        link, _, _, ports = serial_link()
+        link.open()
+        ports[0].reply_delay_s = ACK_TIMEOUT_S
+        self.assertTrue(link.ping())
+
+    def test_reply_after_the_deadline_times_out_and_is_dropped_later(self):
+        link, _, clock, ports = serial_link()
+        link.open()
+        ports[0].reply_delay_s = ACK_TIMEOUT_S + 0.02
+        with self.assertRaises(LinkTimeout):
+            link.ping()
+        ports[0].reply_delay_s = 0.0
+        clock.advance(0.1)             # the late PONG lands while nobody is waiting
+        self.assertEqual(link.query(), REST)
+        self.assertEqual(link.stale_replies, 1)
+
+    def test_endless_line_noise_cannot_stall_a_request(self):
+        class NoisyPort(SimSerialPort):
+            @property
+            def in_waiting(self):
+                return 16
+
+            def read(self, size=1):
+                self.clock.advance(0.001)  # bytes take time on the wire
+                return b"x" * size
+
+        clock = FakeClock()
+        sim = FirmwareSim(clock=clock)
+        noisy = NoisyPort(sim, clock)
+
+        def factory(device, baud, timeout_s):
+            noisy.timeout = timeout_s
+            return noisy
+
+        link = SerialLink("/dev/fake", serial_factory=factory, clock=clock, ready_timeout_s=0.02)
+        with self.assertLogs("hand.link", level="WARNING"), self.assertRaises(HandshakeError):
+            link.open()  # no READY and no PONG through the noise: gives up in bounded time
+
     def test_unsolicited_and_garbled_lines_before_the_reply(self):
         link, _, _, ports = serial_link()
         link.open()

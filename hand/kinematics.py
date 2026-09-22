@@ -60,12 +60,13 @@ THUMB_OPP_RANGE = Range(1.82, 0.21)
 # Taken only over frames where index and middle are both extended. Elsewhere the
 # angle between their proximal phalanges measures flexion, not abduction
 # (G, P, Q, X read 70-120 deg), and would swamp the range.
-SPREAD_RANGE_DEG = Range(1.1, 17.6)
-EXTENDED_CURL_01 = 0.3
+SPREAD_RANGE_DEG = Range(1.1, 16.9)
+EXTENDED_CURL_01 = 0.25
 # Spread fades from measured to 0 as the more-curled of index/middle goes from
-# curl_01 0.3 to 0.6: abduction of a curled finger is undefined, and 0 (together)
-# is how fingers sit in a fist.
-SPREAD_FADE_CURL_01 = (0.3, 0.6)
+# curl_01 0.25 to 0.45, the gap between letters with both fingers extended
+# (median at most 0.22, H) and letters with one curled (at least 0.52, P).
+# Abduction of a curled finger is undefined; 0 (together) is how a fist sits.
+SPREAD_FADE_CURL_01 = (0.25, 0.45)
 WRIST_ROLL_FULL_DEG = 90.0  # palm edge-on to the camera -> wrist_roll = +-1
 
 

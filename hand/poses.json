@@ -26,7 +26,7 @@
     ],
     "spread": [
       1.1,
-      17.6
+      16.9
     ],
     "thumb_flex": [
       14.0,
@@ -59,7 +59,7 @@
         0.002
       ],
       "source": "dataset",
-      "spread": 0.266,
+      "spread": 0.277,
       "thumb_flex": 0.758,
       "thumb_opp": 0.928,
       "wrist_roll": 0.0
@@ -85,7 +85,7 @@
         0.607
       ],
       "source": "dataset",
-      "spread": 0.188,
+      "spread": 0.0,
       "thumb_flex": 0.494,
       "thumb_opp": 0.752,
       "wrist_roll": 0.0
@@ -198,7 +198,7 @@
         0.592
       ],
       "source": "dataset",
-      "spread": 0.46,
+      "spread": 0.48,
       "thumb_flex": 0.097,
       "thumb_opp": 0.736,
       "wrist_roll": 0.0
@@ -254,7 +254,7 @@
         0.457
       ],
       "source": "dataset",
-      "spread": 0.014,
+      "spread": 0.0,
       "thumb_flex": 0.168,
       "thumb_opp": 0.748,
       "wrist_roll": 0.0
@@ -284,7 +284,7 @@
       ],
       "reason": "P is K pointing down. The 8-channel hand has a wrist roll but no pitch (\u00a710.6), so P keeps the upright orientation. It still differs from K by the bent middle finger (0.51 against K's 0.04 in the data). This entry records that decision and changes nothing.",
       "source": "dataset+override",
-      "spread": 0.276,
+      "spread": 0.0,
       "thumb_flex": 0.18,
       "thumb_opp": 0.683,
       "wrist_roll": 0.0
@@ -301,7 +301,7 @@
       ],
       "reason": "Q is G pointing down, and the hand has no wrist pitch (\u00a710.6). Q stays upright with the palm to the viewer, so it differs from G, which turns edge-on. This entry records that decision and changes nothing.",
       "source": "dataset+override",
-      "spread": 0.177,
+      "spread": 0.0,
       "thumb_flex": 0.096,
       "thumb_opp": 0.609,
       "wrist_roll": 0.0
@@ -314,7 +314,7 @@
         0.562
       ],
       "source": "dataset",
-      "spread": 0.259,
+      "spread": 0.271,
       "thumb_flex": 0.457,
       "thumb_opp": 0.894,
       "wrist_roll": 0.0
@@ -366,7 +366,7 @@
         0.606
       ],
       "source": "dataset",
-      "spread": 0.096,
+      "spread": 0.101,
       "thumb_flex": 0.499,
       "thumb_opp": 0.935,
       "wrist_roll": 0.0
@@ -379,7 +379,7 @@
         0.595
       ],
       "source": "dataset",
-      "spread": 0.41,
+      "spread": 0.429,
       "thumb_flex": 0.433,
       "thumb_opp": 0.942,
       "wrist_roll": 0.0
@@ -392,7 +392,7 @@
         0.504
       ],
       "source": "dataset",
-      "spread": 0.346,
+      "spread": 0.361,
       "thumb_flex": 0.655,
       "thumb_opp": 0.838,
       "wrist_roll": 0.0

@@ -6,7 +6,9 @@ The contract between `hand/protocol.py` and `firmware/collector_hand`. Any chang
 
 - USB CDC serial, **115200 baud, 8N1**, no flow control.
 - ASCII, one command per line, terminated by `\n` (a trailing `\r` is ignored).
-- Max line length is **48 bytes** including `\n`. Longer lines are discarded and answered with `ERR 2`.
+- Fields are separated by one or more spaces; leading and trailing spaces are ignored. Command letters are upper case. Blank lines are ignored and get no reply.
+- An integer is an optional `-` followed by 1–4 ASCII digits (`7`, `007`, `-5`). Anything else (`+5`, `5.0`, `0x10`, `12345`) is `ERR 3`. The 4-digit cap keeps every value inside an AVR `int16_t`.
+- Max line length is **48 bytes** including `\n` (a trailing `\r` counts). Longer lines are discarded up to their `\n` and answered once with `ERR 2`.
 - Every command gets exactly one reply line. Python waits ≤ 50 ms for it (the ack timeout).
 - After reset the Arduino prints `READY v1 ch=8`. The Python link waits for it (≤ 2.5 s, because the Uno auto-resets when the port opens).
 
@@ -22,7 +24,11 @@ The contract between `hand/protocol.py` and `firmware/collector_hand`. Any chang
 | `Q` | `Q` | Query current angles. | `A 90 118 3 0 …` (8 values) |
 | `V s` | `V 6` | Set slew limit in degrees per 20 ms tick (1–30). | `OK` |
 
-Angles outside `[HARD_MIN[ch], HARD_MAX[ch]]` are **clamped, not rejected**. The reply is then `OK C` so Python can log that its config is wider than the firmware allows.
+Angles outside `[HARD_MIN[ch], HARD_MAX[ch]]` are **clamped, not rejected**. The reply is then `OK C` so Python can log that its config is wider than the firmware allows. A slew value outside 1–30 is clamped the same way (`OK C`).
+
+A channel number outside 0–7 is **rejected** with `ERR 3`, because clamping it would move the wrong servo.
+
+Python never sends an angle outside 0–180: `hand/protocol.py` refuses to encode one, so clamping only ever triggers on the firmware's narrower `HARD_MIN`/`HARD_MAX` or on lines typed by hand.
 
 ## 3. Replies and errors (Arduino → Python)
 
@@ -31,10 +37,14 @@ Angles outside `[HARD_MIN[ch], HARD_MAX[ch]]` are **clamped, not rejected**. The
 | `OK` / `OK C` | accepted / accepted with clamping |
 | `ERR 1` | unknown command or wrong number of fields |
 | `ERR 2` | line too long |
-| `ERR 3` | value not an integer |
+| `ERR 3` | value not an integer, or channel out of range |
 | `ERR 4` | E-stop active: send `H` to re-arm |
 | `READY v1 ch=8` | unsolicited, after boot/reset |
 | `WDT` | unsolicited: watchdog fired (no command for 3 s), hand relaxed |
+
+When several errors apply, the first failing check wins: line length (`ERR 2`), then command letter and field count (`ERR 1`), then values (`ERR 3`), then E-stop (`ERR 4`).
+
+`READY` and `WDT` can arrive at any time, including just before a reply. They never count as the reply to a command.
 
 ## 4. Timing
 
@@ -44,9 +54,11 @@ Angles outside `[HARD_MIN[ch], HARD_MAX[ch]]` are **clamped, not rejected**. The
 
 ## 5. Standalone demo (optional)
 
-`scripts/build_poses.py --emit-firmware-table` writes `firmware/collector_hand/poses_table.h` with the 26 letters as a `PROGMEM` array. With `#define STANDALONE_DEMO`, the sketch also accepts `L <letter>` → `OK`, for demos without a laptop. The table is generated from `hand/poses.json` and never edited by hand.
+`scripts/build_poses.py --emit-firmware-table` writes `firmware/collector_hand/poses_table.h` with the 26 letters as a `PROGMEM` array. With `#define STANDALONE_DEMO`, the sketch also accepts `L <letter>` → `OK`, for demos without a laptop. The table is generated from `hand/poses.json` and never edited by hand. A demo build answers a field that is not a single letter A–Z with `ERR 3`; a normal build answers any `L` line with `ERR 1`.
 
 ## 6. Example session
+
+The angles are illustrative. Real values depend on the calibration and `invert` flags in `config/hand.yaml`.
 
 ```
 ← READY v1 ch=8

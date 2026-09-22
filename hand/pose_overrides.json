@@ -1,0 +1,35 @@
+{
+  "_comment": "Hand-authored corrections to the dataset poses, applied field by field by scripts/build_poses.py (ARCHITECTURE §4.2). Every entry needs a reason. Values are HandPose fields (§3); curl may be a {finger: value} dict to change single fingers. Copied values name the recorded letter they come from. Rebuild after editing: python scripts/build_poses.py",
+  "F": {
+    "reason": "The recorded F looks like B (§9.1): in all 20 sessions the index is straight (curl 0.01) and the thumb tip is 0.95 from the index tip, like B's 0.99, where a real F pinches (O: 0.22). Index and thumb are copied from O's circle; the other fingers come from the data. Recollect F with a clear index-thumb circle, then delete this override.",
+    "curl": {"index": 0.55},
+    "thumb_flex": 0.17,
+    "thumb_opp": 0.75,
+    "spread": 0.0
+  },
+  "G": {
+    "reason": "G was recorded facing the camera (§9.2), with the index bent 51 deg at the MCP to point sideways and a bent thumb. G shares Q's handshape, and Q's recording is clean, so the index and thumb are copied from Q. The palm turns edge-on the same way the recorded H does (+0.6 = H's measured +0.75 minus the +0.15 all-letter baseline). Pointing sideways needs a wrist the 8-channel hand lacks (§10.6).",
+    "curl": {"index": 0.05},
+    "thumb_flex": 0.10,
+    "thumb_opp": 0.61,
+    "wrist_roll": 0.6
+  },
+  "H": {
+    "reason": "H is U turned sideways. The recorded H does turn the palm (measured roll +0.75 against a +0.15 baseline for every letter), so it keeps +0.6. The index, middle, and spread are copied from U, because the recorded H's are noisy (spread IQR 0.07-0.56).",
+    "curl": {"index": 0.04, "middle": 0.03},
+    "spread": 0.10,
+    "wrist_roll": 0.6
+  },
+  "L": {
+    "reason": "The recorded L's index reads curl 0.49: its MCP is bent 97 deg in 3D and 100 deg in 2D, so this is not z-noise (§9.4). In the image the index tip sits below the wrist, folded against the palm line. A real L's index is straight, so it is copied from K's index (0.03). The thumb (out, opp 0.04) and the other fingers come from the data. Recollect L with the index pointing up.",
+    "curl": {"index": 0.03}
+  },
+  "P": {
+    "reason": "P is K pointing down. The 8-channel hand has a wrist roll but no pitch (§10.6), so P keeps the upright orientation. It still differs from K by the bent middle finger (0.51 against K's 0.04 in the data). This entry records that decision and changes nothing.",
+    "wrist_roll": 0.0
+  },
+  "Q": {
+    "reason": "Q is G pointing down, and the hand has no wrist pitch (§10.6). Q stays upright with the palm to the viewer, so it differs from G, which turns edge-on. This entry records that decision and changes nothing.",
+    "wrist_roll": 0.0
+  }
+}

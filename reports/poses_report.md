@@ -44,7 +44,14 @@ Median over every frame of the letter, IQR in brackets; ⚠ marks an IQR wider t
 
 ## Overrides applied (`hand/pose_overrides.json`)
 
-None.
+| Letter | Fields | Reason |
+|---|---|---|
+| F | curl.index, thumb_flex, thumb_opp, spread | The recorded F looks like B (§9.1): in all 20 sessions the index is straight (curl 0.01) and the thumb tip is 0.95 from the index tip, like B's 0.99, where a real F pinches (O: 0.22). Index and thumb are copied from O's circle; the other fingers come from the data. Recollect F with a clear index-thumb circle, then delete this override. |
+| G | curl.index, thumb_flex, thumb_opp, wrist_roll | G was recorded facing the camera (§9.2), with the index bent 51 deg at the MCP to point sideways and a bent thumb. G shares Q's handshape, and Q's recording is clean, so the index and thumb are copied from Q. The palm turns edge-on the same way the recorded H does (+0.6 = H's measured +0.75 minus the +0.15 all-letter baseline). Pointing sideways needs a wrist the 8-channel hand lacks (§10.6). |
+| H | curl.index, curl.middle, spread, wrist_roll | H is U turned sideways. The recorded H does turn the palm (measured roll +0.75 against a +0.15 baseline for every letter), so it keeps +0.6. The index, middle, and spread are copied from U, because the recorded H's are noisy (spread IQR 0.07-0.56). |
+| L | curl.index | The recorded L's index reads curl 0.49: its MCP is bent 97 deg in 3D and 100 deg in 2D, so this is not z-noise (§9.4). In the image the index tip sits below the wrist, folded against the palm line. A real L's index is straight, so it is copied from K's index (0.03). The thumb (out, opp 0.04) and the other fingers come from the data. Recollect L with the index pointing up. |
+| P | wrist_roll | P is K pointing down. The 8-channel hand has a wrist roll but no pitch (§10.6), so P keeps the upright orientation. It still differs from K by the bent middle finger (0.51 against K's 0.04 in the data). This entry records that decision and changes nothing. |
+| Q | wrist_roll | Q is G pointing down, and the hand has no wrist pitch (§10.6). Q stays upright with the palm to the viewer, so it differs from G, which turns edge-on. This entry records that decision and changes nothing. |
 
 ## Final poses (`hand/poses.json`)
 
@@ -55,18 +62,18 @@ None.
 | C | 0.67 | 0.51 | 0.52 | 0.49 | 0.50 | 0.81 | 0.00 | +0.00 | dataset |
 | D | 0.07 | 0.54 | 0.59 | 0.61 | 0.49 | 0.75 | 0.19 | +0.00 | dataset |
 | E | 0.80 | 0.66 | 0.69 | 0.68 | 0.96 | 0.87 | 0.00 | +0.00 | dataset |
-| F | 0.01 | 0.01 | 0.01 | 0.02 | 0.47 | 0.90 | 0.31 | +0.00 | dataset |
-| G | 0.34 | 0.70 | 0.88 | 0.85 | 0.73 | 0.73 | 0.00 | +0.00 | dataset |
-| H | 0.20 | 0.16 | 0.63 | 0.64 | 0.80 | 0.65 | 0.27 | +0.00 | dataset |
+| F | 0.55 | 0.01 | 0.01 | 0.02 | 0.17 | 0.75 | 0.00 | +0.00 | dataset+override |
+| G | 0.05 | 0.70 | 0.88 | 0.85 | 0.10 | 0.61 | 0.00 | +0.60 | dataset+override |
+| H | 0.04 | 0.03 | 0.63 | 0.64 | 0.80 | 0.65 | 0.10 | +0.60 | dataset+override |
 | I | 0.76 | 0.57 | 0.60 | 0.08 | 0.37 | 0.82 | 0.00 | +0.00 | dataset |
 | J | 0.76 | 0.57 | 0.60 | 0.08 | 0.37 | 0.82 | 0.00 | +0.00 | motion-stub |
 | K | 0.03 | 0.04 | 0.58 | 0.59 | 0.10 | 0.74 | 0.46 | +0.00 | dataset |
-| L | 0.49 | 0.74 | 0.90 | 0.83 | 0.18 | 0.04 | 0.00 | +0.00 | dataset |
+| L | 0.03 | 0.74 | 0.90 | 0.83 | 0.18 | 0.04 | 0.00 | +0.00 | dataset+override |
 | M | 0.73 | 0.54 | 0.56 | 0.65 | 0.39 | 0.98 | 0.00 | +0.00 | dataset |
 | N | 0.70 | 0.53 | 0.58 | 0.60 | 0.38 | 0.89 | 0.00 | +0.00 | dataset |
 | O | 0.55 | 0.46 | 0.49 | 0.46 | 0.17 | 0.75 | 0.01 | +0.00 | dataset |
-| P | 0.17 | 0.51 | 0.57 | 0.58 | 0.18 | 0.68 | 0.28 | +0.00 | dataset |
-| Q | 0.05 | 0.55 | 0.60 | 0.61 | 0.10 | 0.61 | 0.18 | +0.00 | dataset |
+| P | 0.17 | 0.51 | 0.57 | 0.58 | 0.18 | 0.68 | 0.28 | +0.00 | dataset+override |
+| Q | 0.05 | 0.55 | 0.60 | 0.61 | 0.10 | 0.61 | 0.18 | +0.00 | dataset+override |
 | R | 0.05 | 0.03 | 0.57 | 0.56 | 0.46 | 0.89 | 0.26 | +0.00 | dataset |
 | S | 0.94 | 0.85 | 0.89 | 0.89 | 0.36 | 0.85 | 0.00 | +0.00 | dataset |
 | T | 0.78 | 0.74 | 0.84 | 0.86 | 0.14 | 0.82 | 0.00 | +0.00 | dataset |

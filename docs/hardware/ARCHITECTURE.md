@@ -211,6 +211,7 @@ Found by running the kinematics sketch over `landmarks_dataset.csv`:
    - (c) Define REST as "every horn at 90°" (the assembly neutral, WIRING.md §5) and let Python send the real open pose. Simplest, but the hand then goes to a half-closed pose on a watchdog relax.
 
    Until this is decided, `FirmwareSim` uses 90° on every channel.
+6. **Orientation letters need more than wrist roll.** (Found while writing the stage-2 overrides.) ASL G and H point sideways and P and Q point down. Channel 7 rolls the hand about a vertical forearm (the Blender model and WIRING.md S7), which can turn the palm edge-on but cannot point the fingers sideways or down. The Blender pose table uses a 3-axis wrist for exactly these letters. In v1, `pose_overrides.json` turns G and H edge-on (roll +0.6) and keeps P and Q upright: P differs from K by its bent middle finger, and Q differs from G by facing the viewer. Options: (a) accept these approximations for v1; (b) add a wrist flexion servo as channel 8 (`ch=9`, a PROTOCOL v2 change, the PCA9685 has room); (c) mount the forearm on a tilting base. The robot-reads-robot test in stage 5 will measure whether (a) is good enough.
 
 ---
 

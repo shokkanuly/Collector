@@ -3,7 +3,8 @@ import random
 import unittest
 
 from hand import N_CH, HandPose, ServoFrame
-from hand.mapping import ChannelConfig, HandConfig, ServoMapper, config_from_dict, load_config
+from hand.mapping import (ChannelConfig, HandConfig, ServoMapper, UncalibratedError, config_from_dict,
+                          load_config)
 from hand.pose_library import PoseLibrary
 from hand.protocol import MAX_LINE_BYTES, SetAll, encode_command
 from hand.types import JOINTS
@@ -27,7 +28,13 @@ class TestRepoConfig(unittest.TestCase):
     """config/hand.yaml as committed (ARCHITECTURE §4.3 defaults, before calibration)."""
 
     def setUp(self):
-        self.mapper = ServoMapper.from_config(load_config())
+        self.mapper = ServoMapper.from_config(load_config(), allow_uncalibrated=True)
+
+    def test_committed_config_is_not_calibrated_so_frames_are_refused(self):
+        """The defaults span each servo's whole travel; driving a real hand with them could stall it."""
+        self.assertFalse(load_config().calibrated)
+        with self.assertRaises(UncalibratedError):
+            ServoMapper.from_config(load_config())
 
     def test_rest_opens_every_finger_whichever_way_its_servo_turns(self):
         # thumb_flex 10, thumb_opp 20, index 0, middle 180 (inverted), ring 0,
@@ -48,6 +55,11 @@ class TestRepoConfig(unittest.TestCase):
         cfg = load_config()
         self.assertEqual((cfg.port, cfg.baud, cfg.rate_hz), ("auto", 115200, 30.0))
         self.assertEqual((cfg.letter_hold_ms, cfg.smoothing_alpha), (900, 0.35))
+
+    def test_a_calibrated_config_builds_a_mapper(self):
+        raw = {"calibrated": True, "channels": [dict(ch=c.ch, joint=c.joint, min_deg=c.min_deg,
+                                                     max_deg=c.max_deg) for c in channels()]}
+        self.assertIsInstance(ServoMapper.from_config(config_from_dict(raw)), ServoMapper)
 
 
 class TestMappingRules(unittest.TestCase):
@@ -143,7 +155,7 @@ class TestConfigValidation(unittest.TestCase):
                             for c in channels()]}
         self.assertIsInstance(config_from_dict(raw), HandConfig)
         for key, value in (("smoothing_alpha", 0), ("smoothing_alpha", 1.5), ("rate_hz", 0),
-                           ("letter_hold_ms", -1)):
+                           ("letter_hold_ms", -1), ("calibrated", "yes")):
             with self.subTest(key=key, value=value), self.assertRaises(ValueError):
                 config_from_dict(dict(raw, **{key: value}))
 

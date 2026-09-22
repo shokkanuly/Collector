@@ -21,6 +21,10 @@ from .types import JOINTS, N_CH, SERVO_MAX_DEG, SERVO_MIN_DEG, HandPose, ServoFr
 DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config", "hand.yaml")
 
 
+class UncalibratedError(RuntimeError):
+    """config/hand.yaml still holds the design defaults, not measured ranges."""
+
+
 @dataclass(frozen=True)
 class ChannelConfig:
     """One PCA9685 channel: the joint it drives and its calibrated range."""
@@ -58,8 +62,11 @@ class HandConfig:
     channels: Tuple[ChannelConfig, ...]
     letter_hold_ms: int
     smoothing_alpha: float
+    calibrated: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.calibrated, bool):
+            raise ValueError(f"calibrated must be true or false, got {self.calibrated!r}")
         if not self.rate_hz > 0:
             raise ValueError(f"rate_hz must be positive, got {self.rate_hz}")
         if not 0 < self.smoothing_alpha <= 1:
@@ -75,7 +82,8 @@ def config_from_dict(raw: Mapping[str, Any]) -> HandConfig:
     return HandConfig(port=str(raw.get("port", "auto")), baud=int(raw.get("baud", 115200)),
                       rate_hz=float(raw.get("rate_hz", 30)), channels=channels,
                       letter_hold_ms=int(raw.get("letter_hold_ms", 900)),
-                      smoothing_alpha=float(raw.get("smoothing_alpha", 0.35)))
+                      smoothing_alpha=float(raw.get("smoothing_alpha", 0.35)),
+                      calibrated=raw.get("calibrated", False))
 
 
 def load_config(path: str = DEFAULT_CONFIG) -> HandConfig:
@@ -97,7 +105,21 @@ class ServoMapper:
         self.channels: Tuple[ChannelConfig, ...] = tuple(chans)
 
     @classmethod
-    def from_config(cls, config: HandConfig) -> "ServoMapper":
+    def from_config(cls, config: HandConfig, allow_uncalibrated: bool = False) -> "ServoMapper":
+        """The mapper for a hand config; refuses one that was never calibrated.
+
+        Shaped letters close fingers all the way (curl 1 -> max_deg), and the
+        design defaults span each servo's whole travel, so on an uncalibrated
+        hand they would stall servos against their end stops or snap a tendon.
+        Pass allow_uncalibrated=True only when nothing physical is attached
+        (a MockLink dry run).
+        """
+        if not config.calibrated and not allow_uncalibrated:
+            raise UncalibratedError(
+                "config/hand.yaml is not calibrated: letter frames could drive servos to their "
+                "mechanical ends. Measure each channel's slack and closed angles (ROADMAP stage 4, "
+                "`hand_cli.py calibrate`) and set `calibrated: true`, or pass allow_uncalibrated=True "
+                "for a MockLink dry run.")
         return cls(config.channels)
 
     @staticmethod

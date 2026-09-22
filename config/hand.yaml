@@ -4,6 +4,11 @@
 # (CLAUDE.md rule 5). min_deg/max_deg are design defaults until calibration
 # (ROADMAP stage 4: `hand_cli.py calibrate`) finds, per channel, the angle
 # where the tendon is slack and the angle where the finger is fully closed.
+# false until every channel's min_deg/max_deg below have been measured on the
+# assembled hand. Letter frames drive closed fingers to max_deg, and these
+# defaults span each servo's whole travel, so hand.mapping refuses to build
+# frames from an uncalibrated config (a MockLink dry run can opt in).
+calibrated: false
 port: auto            # or /dev/tty.usbmodem1101, COM3
 baud: 115200
 rate_hz: 30

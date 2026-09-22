@@ -122,7 +122,9 @@ letter_hold_ms: 900   # minimum time a letter pose is held in spell mode
 smoothing_alpha: 0.35 # EMA in mirror mode
 ```
 
-`angle = min + value_01 × (max − min)`, inverted if `invert`, rounded, and clamped. The `min_deg`/`max_deg` values come from calibration (ROADMAP stage 4), where the user finds the angle at which each tendon is slack and the angle at which the finger is fully closed without stalling the servo.
+`angle = min + value_01 × (max − min)`, inverted if `invert`, rounded, and clamped. (`wrist_roll` maps its −1..1 onto the whole range, so 0 lands mid-range.)
+
+**Calibration interlock** (added in the review pass). `config/hand.yaml` carries `calibrated: false` until calibration has measured every channel. Shaped letters drive closed fingers to `max_deg`, and the design defaults span each servo's whole travel, so `ServoMapper.from_config()` raises `UncalibratedError` on an uncalibrated config. Only a MockLink dry run may opt out (`allow_uncalibrated=True`). The calibrate command itself uses raw `C` commands and sets the flag when it writes the measured ranges. The `min_deg`/`max_deg` values come from calibration (ROADMAP stage 4), where the user finds the angle at which each tendon is slack and the angle at which the finger is fully closed without stalling the servo.
 
 ### 4.4 Controller and threading
 
@@ -137,6 +139,16 @@ frame → landmarks → letter ──put_nowait──►  Queue(maxsize=1)  ─�
 - **Mirror mode** sends every frame, capped at 30 Hz.
 - If the link fails, the controller logs once, marks the HUD `HAND: offline`, and retries every 2 s. The demo keeps running.
 - If no hand is detected for more than 1 s, it sends `REST`.
+
+**Transitions (design from the review pass; validate in stage 4 before coding).** A move between letters can drive the thumb and fingers into each other. S's fingers can close onto a thumb still lying across the palm from B, or M's fingers can fold before the thumb has tucked under them. A tendon hand stalls instead of sliding past, and since shaping (§4.2) closes fingers all the way, contact happens at full force. The controller should order each transition by the thumb states in `hand/handshapes.py`:
+- target thumb **over** the closed fingers (B, H, I, R, S, U, V, W, X): fingers first, then the thumb;
+- target thumb **under** the bent fingers (E, M, N): thumb first, then the fingers fold over it;
+- leaving a thumb-over pose: move the thumb clear before any finger opens. Leaving a fingers-over-thumb pose: lift the fingers before the thumb moves;
+- anything else (thumb out, beside, parallel, between, or touching): one simultaneous move.
+
+Each phase waits for the slew to finish: at the default 6° per 20 ms tick, a full 180° stroke takes 0.6 s, or poll `Q`. The right order depends on the printed thumb's path, so this rule is tested on the assembled hand first. It is not in code yet.
+
+**Mirror mode needs shaping too.** Live kinematics still reads a tucked finger at about 0.8 (median 196° against the 241° fist anchor). To look natural, stage 6 should snap values near the ends (for example ≥ 0.75 → 1) before smoothing.
 
 ### 4.5 Integration into `app_opencv.py`
 

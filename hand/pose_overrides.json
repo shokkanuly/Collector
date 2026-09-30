@@ -1,0 +1,33 @@
+{
+  "_comment": "Hand-authored corrections applied after the handshape shaping, field by field, by scripts/build_poses.py (ARCHITECTURE §4.2). Every entry needs a reason. Values are HandPose fields (§3); curl may be a {finger: value} dict. A letter name as the value copies that letter's shaped value, so an override follows the data instead of freezing a number. Rebuild after editing: python scripts/build_poses.py",
+  "F": {
+    "reason": "The recorded F looks like B (§9.1): in all 20 sessions the index is straight and the thumb tip is 0.95 from the index tip, like B's 0.99, where a real F pinches (O: 0.22). The index and thumb are copied from O's circle. Recollect F with a clear index-thumb circle, then delete this override.",
+    "curl": {"index": "O"},
+    "thumb_flex": "O",
+    "thumb_opp": "O"
+  },
+  "G": {
+    "reason": "G was recorded facing the camera (§9.2) with a bent thumb. G shares Q's handshape, and Q's recording is clean, so the thumb is copied from Q (the extended index comes from the handshape). The palm turns edge-on the same way the recorded H does (+0.6 = H's measured +0.75 minus the +0.15 all-letter baseline). Pointing sideways needs a wrist the 8-channel hand lacks (§10.6).",
+    "thumb_flex": "Q",
+    "thumb_opp": "Q",
+    "wrist_roll": 0.6
+  },
+  "H": {
+    "reason": "H is U turned sideways. The handshape already sets U's fingers and spread; the thumb is copied from U because the recorded H's thumb (opp 0.65) sits beside the tucked fingers instead of over them. The recorded H does turn the palm (measured roll +0.75 against a +0.15 baseline for every letter), so it keeps +0.6.",
+    "thumb_flex": "U",
+    "thumb_opp": "U",
+    "wrist_roll": 0.6
+  },
+  "P": {
+    "reason": "P is K pointing down. The 8-channel hand has a wrist roll but no pitch (§10.6), so P keeps the upright orientation; it differs from K by its forward-bent middle finger. This entry records that decision and changes nothing.",
+    "wrist_roll": 0.0
+  },
+  "Q": {
+    "reason": "Q is G pointing down, and the hand has no wrist pitch (§10.6). Q stays upright with the palm to the viewer, so it differs from G, which turns edge-on. This entry records that decision and changes nothing.",
+    "wrist_roll": 0.0
+  },
+  "Y": {
+    "reason": "Y's thumb sticks out to the side like L's, but the recorded Y reads thumb opp 0.63: its straight thumb (flex 0.03) points forward rather than out, 0.81 from the pinky knuckle against L's 1.75. The opposition is copied from L; the straight thumb comes from the data.",
+    "thumb_opp": "L"
+  }
+}

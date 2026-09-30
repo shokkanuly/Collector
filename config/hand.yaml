@@ -1,0 +1,25 @@
+# Collector Hand hardware config (docs/hardware/ARCHITECTURE.md §4.3).
+# This is the only place hardware facts live. Python clamps every frame to
+# these limits and the firmware clamps again to its compiled-in limits
+# (CLAUDE.md rule 5). min_deg/max_deg are design defaults until calibration
+# (ROADMAP stage 4: `hand_cli.py calibrate`) finds, per channel, the angle
+# where the tendon is slack and the angle where the finger is fully closed.
+# false until every channel's min_deg/max_deg below have been measured on the
+# assembled hand. Letter frames drive closed fingers to max_deg, and these
+# defaults span each servo's whole travel, so hand.mapping refuses to build
+# frames from an uncalibrated config (a MockLink dry run can opt in).
+calibrated: false
+port: auto            # or /dev/tty.usbmodem1101, COM3
+baud: 115200
+rate_hz: 30
+channels:             # PCA9685 channel -> joint; order matches hand.types.JOINTS
+  - {ch: 0, joint: thumb_flex, min_deg: 10, max_deg: 170, invert: false}
+  - {ch: 1, joint: thumb_opp,  min_deg: 20, max_deg: 160, invert: false}
+  - {ch: 2, joint: index,      min_deg: 0,  max_deg: 180, invert: false}
+  - {ch: 3, joint: middle,     min_deg: 0,  max_deg: 180, invert: true}
+  - {ch: 4, joint: ring,       min_deg: 0,  max_deg: 180, invert: false}
+  - {ch: 5, joint: pinky,      min_deg: 0,  max_deg: 180, invert: true}
+  - {ch: 6, joint: spread,     min_deg: 60, max_deg: 120, invert: false}
+  - {ch: 7, joint: wrist_roll, min_deg: 0,  max_deg: 180, invert: false}
+letter_hold_ms: 900   # minimum time a letter pose is held in spell mode
+smoothing_alpha: 0.35 # EMA in mirror mode

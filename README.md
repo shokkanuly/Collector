@@ -17,6 +17,9 @@ The project consists of two main workflows:
 
 [Real-Time Subsystem]
   Webcam Frame ──► MediaPipe (21 Points) ──► Normalization ──► Trained Model ──► Stable HUD prediction ──► TTS Audio Speak
+
+[Hardware Subsystem — Milestone 2, in progress]
+  Letter or landmarks ──► HandPose ──► config/hand.yaml calibration ──► USB serial ──► Arduino ──► 8 servos ──► printed hand
 ```
 
 ---
@@ -93,6 +96,32 @@ This opens a dashboard in your browser with sidebar controls.
 streamlit run app_streamlit.py
 ```
 *(Note: Requires browser camera permissions. Falls back to a desktop client recommendation if WebRTC is not supported on the host system. The OpenCV desktop client is the recommended demo surface — it is lower-latency and does not depend on WebRTC.)*
+
+---
+
+## Milestone 2: Robotic Hand (in progress)
+
+A servo-driven hand that signs the letter the recognizer reads. An Arduino Uno drives 8 servos through a PCA9685 over USB serial; all the intelligence (poses, kinematics, calibration) stays in Python, where it is testable. The recognizer runs exactly as before with no hardware attached.
+
+![All 28 poses the hand can make](reports/poses_preview.png)
+
+Every letter's pose is built from `landmarks_dataset.csv`: the median of each measured hand feature, shaped to the letter's ASL handshape, with hand-authored corrections where a recording disagrees. `reports/poses_report.md` shows the numbers behind every pose, and the picture above is generated from the same file.
+
+| Status | |
+|---|---|
+| Done | serial protocol + codec, link layer with a simulated Arduino, kinematics, pose library, servo mapping — 122 tests, no hardware needed |
+| Next | Arduino firmware and bench test, then assembly and calibration, then the live demo |
+
+```bash
+pip install -r requirements-hand.txt   # pyserial, pyyaml, pytest
+python -m pytest tests/hand -q         # hardware tests (no Arduino needed)
+python scripts/build_poses.py          # dataset → hand/poses.json + report
+python scripts/render_poses.py         # hand/poses.json → reports/poses_preview.png
+```
+
+Design and build docs live in [`docs/hardware/`](docs/hardware/): [ARCHITECTURE](docs/hardware/ARCHITECTURE.md) (design, decisions), [PROTOCOL](docs/hardware/PROTOCOL.md) (the serial contract), [WIRING](docs/hardware/WIRING.md) (parts list, every wire, power budget), and [ROADMAP](docs/hardware/ROADMAP.md) (stages and their "done when"). `blender/` holds a 1:1 model of the hand.
+
+Two hardware limits are known and documented: with a wrist that only rotates, G/H/P/Q cannot point sideways or down, and with one servo per finger, X's hook shows as a partial bend.
 
 ---
 
